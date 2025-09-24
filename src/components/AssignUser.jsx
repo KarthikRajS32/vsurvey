@@ -28,16 +28,18 @@ const AssignUser = () => {
     { id: 5, name: "Brand Awareness Survey" },
   ];
 
-  useEffect(() => {
-    const saved = localStorage.getItem('userAssignments');
-    if (saved) {
-      setUserAssignments(JSON.parse(saved));
-    }
-  }, []);
+  
 
   useEffect(() => {
     localStorage.setItem('userAssignments', JSON.stringify(userAssignments));
   }, [userAssignments]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("userAssignments");
+    if (saved) {
+      setUserAssignments(JSON.parse(saved));
+    }
+  }, []);
 
   const filteredUsers = users.filter(user => 
     user.name.toLowerCase().includes(userSearch.toLowerCase()) &&
@@ -283,7 +285,7 @@ const AssignUser = () => {
       </div>
       
       {/* Right Sidebar - Assigned Surveys Panel */}
-      <div className="lg:w-86 lg:shadow-lg lg:h-screen lg:fixed lg:right-0 lg:top-0 lg:z-40 lg:bg-white lg:overflow-y-auto w-full bg-transparent">
+      <div className="mt-5 lg:w-86 lg:shadow-lg lg:h-screen lg:fixed lg:right-0 lg:top-0 lg:z-40 lg:bg-white lg:overflow-y-auto w-full bg-transparent">
         <div className="lg:p-6 lg:mt-20 p-4 space-y-4">
           <div className="lg:flex lg:items-center lg:justify-center hidden">
             <CardTitle className="text-xl text-black font-semibold flex justify-center">

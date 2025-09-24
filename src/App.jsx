@@ -16,6 +16,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [session, setSession] = useState(false)
   const [showPasswordScreen, setShowPasswordScreen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleLogout = () => {
     setIsAuthenticated(false)
@@ -81,16 +82,20 @@ function App() {
       ) : session ? (
         <>
           <TopBar setActiveTab={setActiveTab} onLogout={handleLogout} />
-          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-          <main className="lg:ml-64 pt-16 sm:pt-20 md:pt-24 p-4 sm:p-6 md:p-8 mt-10">
+          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onSidebarToggle={setSidebarOpen} />
+          <main className={`transition-all duration-300 pt-16 sm:pt-20 md:pt-24 p-4 sm:p-6 md:p-8 mt-10 ${
+            sidebarOpen ? 'lg:ml-64' : 'lg:ml-16'
+          }`}>
             {renderContent()}
           </main>
         </>
       ) : (
         <>
           <TopBar setActiveTab={setActiveTab} onLogout={handleLogout} />
-          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-          <main className="lg:ml-64 pt-16 sm:pt-20 md:pt-24 p-4 sm:p-6 md:p-8 mt-10">
+          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onSidebarToggle={setSidebarOpen} />
+          <main className={`transition-all duration-300 pt-16 sm:pt-20 md:pt-24 p-4 sm:p-6 md:p-8 mt-10 ${
+            sidebarOpen ? 'lg:ml-64' : 'lg:ml-16'
+          }`}>
             {renderContent()}
           </main>
         </>
