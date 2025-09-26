@@ -6,13 +6,48 @@ import Sidebar from "./AssignedSurveys"
 
 const Surveys = () => {
   const [questions, setQuestions] = useState([])
+  const [surveyName, setSurveyName] = useState('')
+  const [surveys, setSurveys] = useState([])
 
   useEffect(() => {
     const savedQuestions = localStorage.getItem('surveyQuestions')
     if (savedQuestions) {
       setQuestions(JSON.parse(savedQuestions))
     }
+    
+    const savedSurveys = localStorage.getItem('createdSurveys')
+    if (savedSurveys) {
+      setSurveys(JSON.parse(savedSurveys))
+    }
+    
+    // Listen for storage changes to sync surveys across components
+    const handleStorageChange = () => {
+      const updatedSurveys = localStorage.getItem('createdSurveys')
+      if (updatedSurveys) {
+        setSurveys(JSON.parse(updatedSurveys))
+      } else {
+        setSurveys([])
+      }
+    }
+    
+    const handleSurveysUpdated = () => {
+      const updatedSurveys = localStorage.getItem('createdSurveys')
+      if (updatedSurveys) {
+        setSurveys(JSON.parse(updatedSurveys))
+      } else {
+        setSurveys([])
+      }
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener('surveysUpdated', handleSurveysUpdated)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('surveysUpdated', handleSurveysUpdated)
+    }
   }, [])
+  
   const [selectedQuestions, setSelectedQuestions] = useState([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showSurveySelectModal, setShowSurveySelectModal] = useState(false)
@@ -21,14 +56,7 @@ const Surveys = () => {
   const [showPersonnelModal, setShowPersonnelModal] = useState(false)
 
 
-  
-  const [activeSurveys, setActiveSurveys] = useState([
-    { id: 1, name: 'Customer Satisfaction Survey', date: '2024-01-15' },
-    { id: 2, name: 'Product Feedback Survey', date: '2024-01-14' },
-    { id: 3, name: 'Market Research Survey', date: '2024-01-13' },
-    { id: 4, name: 'Employee Engagement Survey', date: '2024-01-12' },
-    { id: 5, name: 'Brand Awareness Survey', date: '2024-01-11' }
-  ])
+
 
   const toggleQuestionSelection = (questionId) => {
     setSelectedQuestions(prev => 
@@ -38,21 +66,40 @@ const Surveys = () => {
     )
   }
 
-  const createSurvey = (name) => {
-    if(selectedQuestions.length === 0) {
-      alert("Please select questions to create a survey")
-      return
-    }
+  const saveSurveysToStorage = (updatedSurveys) => {
+    localStorage.setItem('createdSurveys', JSON.stringify(updatedSurveys))
+    // Trigger custom event to sync across components in same tab
+    window.dispatchEvent(new Event('surveysUpdated'))
+  }
 
+  const createSurvey = () => {
     const newSurvey = {
-      id: activeSurveys.length + 1,
-      name: name,
+      id: Date.now(),
+      name: surveyName.trim(),
       date: new Date().toISOString().split('T')[0],
-      questions: selectedQuestions
+      questions: selectedQuestions,
+      questionCount: selectedQuestions.length
     }
-    setActiveSurveys([...activeSurveys, newSurvey])
+    
+    const updatedSurveys = [newSurvey, ...surveys]
+    setSurveys(updatedSurveys)
+    saveSurveysToStorage(updatedSurveys)
     setSelectedQuestions([])
-    alert("Survey created successfully!")
+    setSurveyName('')
+  }
+  
+  const updateSurveyQuestions = (surveyId, questionIds) => {
+    const updatedSurveys = surveys.map(survey => 
+      survey.id === surveyId 
+        ? {
+            ...survey,
+            questions: [...new Set([...survey.questions, ...questionIds])],
+            questionCount: [...new Set([...survey.questions, ...questionIds])].length
+          }
+        : survey
+    )
+    setSurveys(updatedSurveys)
+    saveSurveysToStorage(updatedSurveys)
   }
 
   return (
@@ -68,11 +115,13 @@ const Surveys = () => {
           <div className="flex flex-col md:flex-row gap-3 md:gap-4">
             <input
                 type="text"
+                value={surveyName}
+                onChange={(e) => setSurveyName(e.target.value)}
                 placeholder="Type your survey name here"
                 className="flex-1 bg-transparent text-sm md:text-base border-b-2 border-gray-300 outline-none placeholder-gray-400 focus:placeholder-transparent focus:border-black px-2 py-2"
             />
             <button 
-              onClick={() => setShowCreateModal(true)}
+              onClick={createSurvey}
               className="bg-black text-white px-4 py-2 rounded-[10px] text-sm whitespace-nowrap"
             >
               + Create Survey
@@ -124,6 +173,33 @@ const Surveys = () => {
             ))
           )}
         </div>
+        
+        {/* Created Surveys List */}
+        {/* <div className="mt-6">
+          <h2 className="text-base md:text-lg lg:text-xl font-semibold mb-4">Created Surveys ({surveys.length})</h2>
+          <div className="space-y-3">
+            {surveys.length === 0 ? (
+              <div className="bg-white shadow-md p-4 rounded text-center">
+                <p className="text-gray-500 text-sm">No surveys created yet.</p>
+              </div>
+            ) : (
+              surveys.map((survey) => (
+                <div key={survey.id} className="bg-white shadow-md p-3 md:p-4 rounded border">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-medium text-sm break-words">{survey.name}</h3>
+                      <p className="text-xs text-gray-500 mt-1">Created: {survey.date}</p>
+                      <p className="text-xs text-gray-500">Questions: {survey.questionCount}</p>
+                    </div>
+                    <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                      Active
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div> */}
       </div>
       
       <div className="w-full lg:w-80 lg:flex-shrink-0">
@@ -151,47 +227,55 @@ const Surveys = () => {
               className="mb-4"
             />
             
-            <div className="flex flex-col md:flex-row gap-2 mb-4">
-              <Button 
-                onClick={() => setSelectedSurveys(activeSurveys.map(s => s.id))}
-                className="text-xs"
-                variant="outline"
-              >
-                Select All
-              </Button>
-              <Button 
-                onClick={() => setSelectedSurveys([])}
-                variant="outline"
-                className="text-xs"
-              >
-                Clear All
-              </Button>
-            </div>
-            
-            <div className="space-y-2 mb-4">
-              {activeSurveys
-                .filter(survey => survey.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                .map((survey) => (
-                <div key={survey.id} className="flex items-start gap-2 p-2 md:p-3 border rounded">
-                  <input
-                    type="checkbox"
-                    checked={selectedSurveys.includes(survey.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedSurveys([...selectedSurveys, survey.id])
-                      } else {
-                        setSelectedSurveys(selectedSurveys.filter(id => id !== survey.id))
-                      }
-                    }}
-                    className="mt-1 flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-xs md:text-sm break-words">{survey.name}</p>
-                    <p className="text-xs text-gray-500">{survey.date}</p>
-                  </div>
+            {surveys.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-gray-500 text-sm">No surveys created yet. Create a survey first.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col md:flex-row gap-2 mb-4">
+                  <Button 
+                    onClick={() => setSelectedSurveys(surveys.map(s => s.id))}
+                    className="text-xs"
+                    variant="outline"
+                  >
+                    Select All
+                  </Button>
+                  <Button 
+                    onClick={() => setSelectedSurveys([])}
+                    variant="outline"
+                    className="text-xs"
+                  >
+                    Clear All
+                  </Button>
                 </div>
-              ))}
-            </div>
+                
+                <div className="space-y-2 mb-4">
+                  {surveys
+                    .filter(survey => survey.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .map((survey) => (
+                    <div key={survey.id} className="flex items-start gap-2 p-2 md:p-3 border rounded">
+                      <input
+                        type="checkbox"
+                        checked={selectedSurveys.includes(survey.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSurveys([...selectedSurveys, survey.id])
+                          } else {
+                            setSelectedSurveys(selectedSurveys.filter(id => id !== survey.id))
+                          }
+                        }}
+                        className="mt-1 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-xs md:text-sm break-words">{survey.name}</p>
+                        <p className="text-xs text-gray-500">{survey.date}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             
             <div className="flex flex-col md:flex-row justify-end gap-2">
               <Button 
@@ -203,13 +287,19 @@ const Surveys = () => {
               </Button>
               <Button 
                 onClick={() => {
+                  // Update selected surveys with new questions
+                  selectedSurveys.forEach(surveyId => {
+                    updateSurveyQuestions(surveyId, selectedQuestions)
+                  })
+                  setSelectedQuestions([])
+                  setSelectedSurveys([])
                   setShowSurveySelectModal(false)
-                  setShowPersonnelModal(true)
+                  // alert(`Questions assigned to ${selectedSurveys.length} survey${selectedSurveys.length > 1 ? 's' : ''} successfully!`)
                 }}
                 className="bg-black text-white text-xs"
-                disabled={selectedSurveys.length === 0}
+                disabled={selectedSurveys.length === 0 || surveys.length === 0 || selectedQuestions.length === 0}
               >
-                Assign ({selectedSurveys.length})
+                Assign Questions ({selectedSurveys.length})
               </Button>
             </div>
           </div>

@@ -2,6 +2,9 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Trash2 } from "@/components/ui/icons"
+import { supabase } from './supabaseClient'
 
 const SurveyPersonnel = () => {
   const [formData, setFormData] = useState({
@@ -10,6 +13,11 @@ const SurveyPersonnel = () => {
   })
   const [users, setUsers] = useState([])
   const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(false)
+  
+  // Delete confirmation modal states
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState(null)
 
   useEffect(() => {
     const savedUsers = localStorage.getItem('surveyUsers')
@@ -20,8 +28,30 @@ const SurveyPersonnel = () => {
 
   const saveUsersToStorage = (updatedUsers) => {
     localStorage.setItem('surveyUsers', JSON.stringify(updatedUsers))
+    // Trigger custom event to sync across components
+    window.dispatchEvent(new Event('usersUpdated'))
   }
+  const handleLogin = async (e) => {
+    e.preventDefault()
 
+    try {
+      setLoading(true)
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      })
+      
+      if (error) throw error
+      setMessage('Check your email for the login link!')
+    } catch (error) {
+      setMessage(error.error_description || error.message)
+    } finally {
+      setLoading(false)
+    }
+    
+  }
   const handleSubmit = (e) => {
     e.preventDefault()
     
@@ -53,6 +83,26 @@ const SurveyPersonnel = () => {
     saveUsersToStorage(updatedUsers)
   }
 
+  const openDeleteModal = (user) => {
+    setUserToDelete(user)
+    setIsDeleteModalOpen(true)
+  }
+
+  const confirmDelete = () => {
+    if (userToDelete) {
+      const updatedUsers = users.filter(u => u.id !== userToDelete.id)
+      setUsers(updatedUsers)
+      saveUsersToStorage(updatedUsers)
+    }
+    setIsDeleteModalOpen(false)
+    setUserToDelete(null)
+  }
+
+  const cancelDelete = () => {
+    setIsDeleteModalOpen(false)
+    setUserToDelete(null)
+  }
+  
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 md:gap-6 xl:px-5 xl:ml-10">
@@ -91,6 +141,7 @@ const SurveyPersonnel = () => {
               </div>
               <Button 
                 type="submit"
+                onClick = {()=> {handleLogin()}}
                 className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 p-4 text-sm"
               >
                 Create Survey User
@@ -130,14 +181,24 @@ const SurveyPersonnel = () => {
                           }`}>
                             {user.email}
                           </span>
-                          <Button
-                            variant={user.isActive ? "destructive" : "default"}
-                            size="sm"
-                            onClick={() => toggleUserStatus(user.id)}
-                            className="text-xs ml-2 px-2 py-1"
-                          >
-                            {user.isActive ? "Deactivate" : "Activate"}
-                          </Button>
+                          <div className="flex gap-1 ml-2">
+                            <Button
+                              variant={user.isActive ? "destructive" : "default"}
+                              size="sm"
+                              onClick={() => toggleUserStatus(user.id)}
+                              className="text-xs px-2 py-1"
+                            >
+                              {user.isActive ? "Deactivate" : "Activate"}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDeleteModal(user)}
+                              className="p-1 h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -148,6 +209,34 @@ const SurveyPersonnel = () => {
           </div>
         </div>
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={() => {}}>
+        <DialogContent className="w-full max-w-md mx-4">
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Are you sure you want to delete this user? This action cannot be undone.
+            </p>
+            {userToDelete && (
+              <div className="p-3 bg-gray-50 rounded border">
+                <p className="font-medium text-sm">{userToDelete.fullName}</p>
+                <p className="text-xs text-gray-500 mt-1">{userToDelete.email}</p>
+              </div>
+            )}
+            <div className="flex gap-2 pt-4">
+              <Button onClick={confirmDelete} variant="destructive" className="flex-1">
+                Delete
+              </Button>
+              <Button onClick={cancelDelete} variant="outline" className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

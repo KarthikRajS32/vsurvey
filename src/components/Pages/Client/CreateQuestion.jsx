@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { Edit3, X } from "@/components/ui/icons"
+import { Edit3, X, Trash2 } from "@/components/ui/icons"
 import Sidebar from "./AssignedSurveys"
 
 
@@ -67,10 +67,21 @@ const Surveys = () => {
   const [editOptions, setEditOptions] = useState([''])
   const [showResponseTypeDropdown, setShowResponseTypeDropdown] = useState(false)
   
+  // Delete confirmation modal states
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [questionToDelete, setQuestionToDelete] = useState(null)
+  
   const [activeSurveys, setActiveSurveys] = useState([
     { id: 1, name: 'Customer Satisfaction Survey', date: '2024-01-15' },
     { id: 2, name: 'Product Feedback Survey', date: '2024-01-14' },
     { id: 3, name: 'Market Research Survey', date: '2024-01-13' }
+  ])
+  
+  const [surveyUsers] = useState([
+    { id: 1, name: 'John Doe', email: 'john@example.com', status: 'Active' },
+    { id: 2, name: 'Jane Smith', email: 'jane@example.com', status: 'Pending' },
+    { id: 3, name: 'Mike Johnson', email: 'mike@example.com', status: 'Active' },
+    { id: 4, name: 'Sarah Wilson', email: 'sarah@example.com', status: 'Completed' }
   ])
 
   const responseTypes = ['Text response', 'Multiple choice', 'Rating scale', 'Yes/No', 'Date picker']
@@ -129,6 +140,26 @@ const Surveys = () => {
       saveQuestionsToStorage(updatedQuestions)
       closeEditModal()
     }
+  }
+
+  const openDeleteModal = (question) => {
+    setQuestionToDelete(question)
+    setIsDeleteModalOpen(true)
+  }
+
+  const confirmDelete = () => {
+    if (questionToDelete) {
+      const updatedQuestions = questions.filter(q => q.id !== questionToDelete.id)
+      setQuestions(updatedQuestions)
+      saveQuestionsToStorage(updatedQuestions)
+    }
+    setIsDeleteModalOpen(false)
+    setQuestionToDelete(null)
+  }
+
+  const cancelDelete = () => {
+    setIsDeleteModalOpen(false)
+    setQuestionToDelete(null)
   }
 
   const closeEditModal = () => {
@@ -281,22 +312,84 @@ const Surveys = () => {
                       </div>
                     )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEditModal(question)}
-                    className="p-2 h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditModal(question)}
+                      className="p-2 h-8 w-8 text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDeleteModal(question)}
+                      className="p-2 h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
+        {/* Survey Users List */}
+        <div className="mt-6">
+          <h2 className="text-base md:text-lg lg:text-xl font-semibold mb-4">Survey Users</h2>
+          <div className="bg-white shadow-md rounded border">
+            <div className="max-h-64 overflow-y-auto">
+              {surveyUsers.map((user) => (
+                <div key={user.id} className="flex items-center justify-between p-3 border-b last:border-b-0">
+                  <div>
+                    <p className="font-medium text-sm">{user.name}</p>
+                    <p className="text-xs text-gray-500">{user.email}</p>
+                  </div>
+                  <span className={`px-2 py-1 text-xs rounded ${
+                    user.status === 'Active' ? 'bg-green-100 text-green-800' :
+                    user.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-blue-100 text-blue-800'
+                  }`}>
+                    {user.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Delete Confirmation Modal */}
+        <Dialog open={isDeleteModalOpen} onOpenChange={() => {}}>
+          <DialogContent className="w-full max-w-md mx-4">
+            <DialogHeader>
+              <DialogTitle>Confirm Delete</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Are you sure you want to delete this question? This action cannot be undone.
+              </p>
+              {questionToDelete && (
+                <div className="p-3 bg-gray-50 rounded border">
+                  <p className="font-medium text-sm">{questionToDelete.text}</p>
+                  <p className="text-xs text-gray-500 mt-1">{questionToDelete.type}</p>
+                </div>
+              )}
+              <div className="flex gap-2 pt-4">
+                <Button onClick={confirmDelete} variant="destructive" className="flex-1">
+                  Delete
+                </Button>
+                <Button onClick={cancelDelete} variant="outline" className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Edit Modal */}
-        <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <Dialog open={isEditModalOpen} onOpenChange={() => {}}>
           <DialogContent className="w-full max-w-[95vw] sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center justify-between">

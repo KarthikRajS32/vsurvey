@@ -15,6 +15,7 @@ const AssignUser = () => {
   const [showSurveyDropdown, setShowSurveyDropdown] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState("");
   const [users, setUsers] = useState([]);
+  const [surveys, setSurveys] = useState([]);
 
   useEffect(() => {
     const savedUsers = localStorage.getItem('surveyUsers');
@@ -27,15 +28,46 @@ const AssignUser = () => {
       }));
       setUsers(formattedUsers);
     }
+    
+    const savedSurveys = localStorage.getItem('createdSurveys');
+    if (savedSurveys) {
+      setSurveys(JSON.parse(savedSurveys));
+    }
+    
+    // Listen for surveys updates from other components
+    const handleSurveysUpdated = () => {
+      const updatedSurveys = localStorage.getItem('createdSurveys');
+      if (updatedSurveys) {
+        setSurveys(JSON.parse(updatedSurveys));
+      } else {
+        setSurveys([]);
+      }
+    }
+    
+    const handleUsersUpdated = () => {
+      const updatedUsers = localStorage.getItem('surveyUsers');
+      if (updatedUsers) {
+        const parsedUsers = JSON.parse(updatedUsers);
+        const formattedUsers = parsedUsers.map(user => ({
+          id: user.id.toString(),
+          name: user.fullName
+        }));
+        setUsers(formattedUsers);
+      } else {
+        setUsers([]);
+      }
+    }
+    
+    window.addEventListener('surveysUpdated', handleSurveysUpdated);
+    window.addEventListener('usersUpdated', handleUsersUpdated);
+    
+    return () => {
+      window.removeEventListener('surveysUpdated', handleSurveysUpdated);
+      window.removeEventListener('usersUpdated', handleUsersUpdated);
+    }
   }, []);
 
-  const surveys = [
-    { id: 1, name: "Customer Satisfaction Survey" },
-    { id: 2, name: "Product Feedback Survey" },
-    { id: 3, name: "Market Research Survey" },
-    { id: 4, name: "Employee Engagement Survey" },
-    { id: 5, name: "Brand Awareness Survey" },
-  ];
+
 
   
 
@@ -204,8 +236,9 @@ const AssignUser = () => {
                   }}
                   onFocus={() => setShowSurveyDropdown(true)}
                   onBlur={() => setTimeout(() => setShowSurveyDropdown(false), 200)}
-                  placeholder="Search and select surveys..."
+                  placeholder={surveys.length === 0 ? "No surveys available. Create surveys first." : "Search and select surveys..."}
                   className="rounded-[5px] border-gray-400 p-3 text-sm w-full"
+                  disabled={surveys.length === 0}
                 />
                 {showSurveyDropdown && filteredSurveys.length > 0 && (
                   <div className="absolute z-10 w-full bg-white border border-gray-400 rounded-[5px] mt-1 max-h-40 overflow-y-auto">
