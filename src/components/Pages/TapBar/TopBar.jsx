@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { IoIosArrowDown } from "react-icons/io";
 import { useState } from "react";
 
-const TopBar = ({ setActiveTab, onLogout }) => {
+const TopBar = ({ setActiveTab, onLogout, isSuperAdmin = false }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
 
@@ -32,13 +32,15 @@ const TopBar = ({ setActiveTab, onLogout }) => {
           </h1>
         </div>
         <div className="flex items-center space-x-2 sm:space-x-3 lg:space-x-4">
-          <Button 
-            onClick={() => setActiveTab('surveys')}
-            className="bg-purple-700 text-xs sm:text-sm px-3 sm:px-4 lg:px-6 py-2 sm:py-3"
-          >
-            <span className="hidden sm:inline">+ Create Survey</span>
-            <span className="sm:hidden">+ Survey</span>
-          </Button>
+          {!isSuperAdmin && (
+            <Button 
+              onClick={() => setActiveTab('surveys')}
+              className="bg-purple-700 text-xs sm:text-sm px-3 sm:px-4 lg:px-6 py-2 sm:py-3"
+            >
+              <span className="hidden sm:inline">+ Create Survey</span>
+              <span className="sm:hidden">+ Survey</span>
+            </Button>
+          )}
           <div className="relative">
             <button 
               onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
@@ -46,7 +48,7 @@ const TopBar = ({ setActiveTab, onLogout }) => {
             >
               <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gray-300 rounded-full"></div>
               <span className="hidden sm:inline text-gray-700 font-medium text-sm">
-                Chris Loo
+                {isSuperAdmin ? 'Super Admin' : 'Chris Loo'}
               </span>
               <IoIosArrowDown className="text-base" />
             </button>
