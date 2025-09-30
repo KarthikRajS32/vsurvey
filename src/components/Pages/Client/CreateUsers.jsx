@@ -3,54 +3,43 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Trash2 } from "@/components/ui/icons"
-import { supabase } from './supabaseClient'
+import { Edit3, Trash2 } from "@/components/ui/icons"
+import ClientAdminHeader from "./ClientAdminHeader"
 
-const SurveyPersonnel = () => {
+const SurveyPersonnel = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: ''
   })
   const [users, setUsers] = useState([])
   const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  
+  // Edit modal states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [editFormData, setEditFormData] = useState({
+    fullName: '',
+    email: ''
+  })
   
   // Delete confirmation modal states
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState(null)
 
   useEffect(() => {
-    const savedUsers = localStorage.getItem('surveyUsers')
-    if (savedUsers) {
-      setUsers(JSON.parse(savedUsers))
+    if (profile?.email) {
+      const userKey = `surveyUsers_${profile.email}`
+      const savedUsers = localStorage.getItem(userKey)
+      if (savedUsers) {
+        setUsers(JSON.parse(savedUsers))
+      }
     }
-  }, [])
+  }, [profile?.email])
 
   const saveUsersToStorage = (updatedUsers) => {
-    localStorage.setItem('surveyUsers', JSON.stringify(updatedUsers))
-    // Trigger custom event to sync across components
-    window.dispatchEvent(new Event('usersUpdated'))
-  }
-  const handleLogin = async (e) => {
-    e.preventDefault()
-
-    try {
-      setLoading(true)
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email,
-        options: {
-          emailRedirectTo: window.location.origin,
-        },
-      })
-      
-      if (error) throw error
-      setMessage('Check your email for the login link!')
-    } catch (error) {
-      setMessage(error.error_description || error.message)
-    } finally {
-      setLoading(false)
-    }
-    
+    const userKey = `surveyUsers_${profile?.email || 'default'}`
+    localStorage.setItem(userKey, JSON.stringify(updatedUsers))
   }
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -102,10 +91,55 @@ const SurveyPersonnel = () => {
     setIsDeleteModalOpen(false)
     setUserToDelete(null)
   }
+
+  const openEditModal = (user) => {
+    setEditingUser(user)
+    setEditFormData({
+      fullName: user.fullName,
+      email: user.email
+    })
+    setIsEditModalOpen(true)
+  }
+
+  const handleEditSubmit = (e) => {
+    e.preventDefault()
+    
+    if (!editFormData.fullName.trim() || !editFormData.email.trim()) {
+      return
+    }
+
+    const updatedUsers = users.map(user =>
+      user.id === editingUser.id
+        ? {
+            ...user,
+            fullName: editFormData.fullName.trim(),
+            email: editFormData.email.trim()
+          }
+        : user
+    )
+    setUsers(updatedUsers)
+    saveUsersToStorage(updatedUsers)
+    setIsEditModalOpen(false)
+    setEditingUser(null)
+  }
+
+  const filteredUsers = users.filter(user =>
+    user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  )
   
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 md:gap-6 xl:px-5 xl:ml-10">
+    <div className="min-h-screen bg-gray-50">
+      <ClientAdminHeader 
+        profile={profile} 
+        onProfileEdit={onProfileEdit} 
+        onLogout={onLogout} 
+        onCreateSurvey={onNavigateToSurveys}
+        onNavigateToSurveys={onNavigateToSurveys}
+      />
+      <div className="pt-20 p-4 sm:p-6 md:p-8">
+        <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
       <div className="flex-1 min-w-0">
         <div className="mb-4 md:mb-6">
           <h1 className="text-lg md:text-xl lg:text-2xl xl:text-3xl font-medium">Survey Users Management</h1>
@@ -141,7 +175,6 @@ const SurveyPersonnel = () => {
               </div>
               <Button 
                 type="submit"
-                onClick = {()=> {handleLogin()}}
                 className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 p-4 text-sm"
               >
                 Create Survey User
@@ -159,46 +192,63 @@ const SurveyPersonnel = () => {
               <CardTitle className="text-base lg:text-lg font-semibold text-gray-800 lg:text-center">
                 Survey Users
               </CardTitle>
+              <div className="mt-3">
+                <Input
+                  type="text"
+                  placeholder="Search users..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="text-sm"
+                />
+              </div>
             </div>
             <CardContent className="p-0">
               <div className="space-y-2 lg:space-y-3">
-                {users.length === 0 ? (
+                {filteredUsers.length === 0 ? (
                   <div className="p-3 lg:p-4 border border-gray-300 rounded-lg bg-white">
                     <p className="text-gray-500 text-xs">
-                      No users created yet
+                      {searchTerm ? 'No users found matching your search' : 'No users created yet'}
                     </p>
                   </div>
                 ) : (
-                  users.map((user) => (
+                  filteredUsers.map((user) => (
                     <div key={user.id} className="p-3 lg:p-4 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors">
-                      <h4 className="font-medium text-gray-800 text-xs lg:text-sm break-words mb-2">
-                        {user.fullName}
-                      </h4>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between py-1">
-                          <span className={`text-xs break-words flex-1 ${
-                            user.isActive ? "text-gray-600" : "line-through text-gray-400"
-                          }`}>
-                            {user.email}
-                          </span>
-                          <div className="flex gap-1 ml-2">
-                            <Button
-                              variant={user.isActive ? "destructive" : "default"}
-                              size="sm"
-                              onClick={() => toggleUserStatus(user.id)}
-                              className="text-xs px-2 py-1"
-                            >
-                              {user.isActive ? "Deactivate" : "Activate"}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openDeleteModal(user)}
-                              className="p-1 h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
+                      <div className="mb-2">
+                        <h4 className="font-medium text-gray-800 text-xs lg:text-sm break-words">
+                          {user.fullName}
+                        </h4>
+                        <p className={`text-xs break-words ${
+                          user.isActive ? "text-gray-600" : "line-through text-gray-400"
+                        }`}>
+                          {user.email}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <Button
+                          variant={user.isActive ? "destructive" : "default"}
+                          size="sm"
+                          onClick={() => toggleUserStatus(user.id)}
+                          className="text-xs px-2 py-1"
+                        >
+                          {user.isActive ? "Deactivate" : "Activate"}
+                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditModal(user)}
+                            className="p-1 h-7 w-7"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDeleteModal(user)}
+                            className="p-1 h-7 w-7 text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -209,7 +259,43 @@ const SurveyPersonnel = () => {
           </div>
         </div>
       </div>
+        </div>
+      </div>
       
+      {/* Edit Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="w-[95vw] max-w-md mx-4">
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-black mb-2">FULL NAME</label>
+              <Input
+                type="text"
+                value={editFormData.fullName}
+                onChange={(e) => setEditFormData({...editFormData, fullName: e.target.value})}
+                required
+                className="rounded-[5px] border-gray-400 p-3 text-sm w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-black mb-2">EMAIL</label>
+              <Input
+                type="email"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                required
+                className="rounded-[5px] border-gray-400 p-3 text-sm w-full"
+              />
+            </div>
+            <Button type="submit" className="w-full">
+              Save Changes
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Modal */}
       <Dialog open={isDeleteModalOpen} onOpenChange={() => {}}>
         <DialogContent className="w-full max-w-md mx-4">
@@ -227,11 +313,11 @@ const SurveyPersonnel = () => {
               </div>
             )}
             <div className="flex gap-2 pt-4">
-              <Button onClick={confirmDelete} variant="destructive" className="flex-1">
-                Delete
-              </Button>
-              <Button onClick={cancelDelete} variant="outline" className="flex-1">
+              <Button variant="outline" onClick={cancelDelete} className="flex-1">
                 Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete} className="flex-1">
+                Delete
               </Button>
             </div>
           </div>

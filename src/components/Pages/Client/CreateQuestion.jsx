@@ -5,52 +5,62 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Edit3, X, Trash2 } from "@/components/ui/icons"
-import Sidebar from "./AssignedSurveys"
+import ClientAdminHeader from "./ClientAdminHeader"
 
 
-const Surveys = () => {
+const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
   const [questionText, setQuestionText] = useState('')
   const [responseType, setResponseType] = useState('')
   const [ratingScale, setRatingScale] = useState('1-5')
   const [questions, setQuestions] = useState([])
 
   useEffect(() => {
-    const savedQuestions = localStorage.getItem('surveyQuestions')
-    if (savedQuestions) {
-      setQuestions(JSON.parse(savedQuestions))
-    } else {
-      // Default questions if none saved
-      const defaultQuestions = [
-        {
-          id: 1,
-          text: "How satisfied are you with our product?",
-          type: "Rating scale (1-5)"
-        },
-        {
-          id: 2, 
-          text: "What features would you like to see improved?",
-          type: "Text response"
-        },
-        {
-          id: 3,
-          text: "Would you recommend our product to others?",
-          type: "Yes/No"
-        },
-        {
-          id: 4,
-          text: "How often do you use our product?",
-          type: "Multiple choice",
-          options: ["Daily", "Weekly", "Monthly", "Rarely"]
-        },
-        {
-          id: 5,
-          text: "When did you first start using our product?",
-          type: "Date picker"
-        }
-      ]
-      setQuestions(defaultQuestions)
-      localStorage.setItem('surveyQuestions', JSON.stringify(defaultQuestions))
-    }
+    // Clear old questions and load new ones
+    const defaultQuestions = [
+      {
+        id: 1,
+        text: "Is current DMK govt fulfilled all their promise?",
+        type: "Multiple choice",
+        options: ["Yes", "No", "Dont Know"]
+      },
+      {
+        id: 2,
+        text: "Who is best alternative for ruling DMK",
+        type: "Multiple choice",
+        options: ["ADMK+", "TVK", "NTK", "NO one"]
+      },
+      {
+        id: 3,
+        text: "Your support in 2026 Election",
+        type: "Multiple choice",
+        options: ["DMK+", "ADMK+", "TVK", "NTK", "Others"]
+      },
+      {
+        id: 4,
+        text: "Your MLA Constituency",
+        type: "Text response"
+      },
+      {
+        id: 5,
+        text: "Age",
+        type: "Multiple choice",
+        options: ["Less than 25", "25 to 35", "36 to 50", "51 to 70", "Greater than 70"]
+      },
+      {
+        id: 6,
+        text: "Sex",
+        type: "Multiple choice",
+        options: ["Male", "Female", "Other"]
+      },
+      {
+        id: 7,
+        text: "Are you committed to vote on Election Date",
+        type: "Multiple choice",
+        options: ["Yes", "No. I Live outside tamilnadu/India", "No but influence in family/friend circle"]
+      }
+    ]
+    setQuestions(defaultQuestions)
+    localStorage.setItem('surveyQuestions', JSON.stringify(defaultQuestions))
   }, [])
 
   const saveQuestionsToStorage = (updatedQuestions) => {
@@ -77,12 +87,7 @@ const Surveys = () => {
     { id: 3, name: 'Market Research Survey', date: '2024-01-13' }
   ])
   
-  const [surveyUsers] = useState([
-    { id: 1, name: 'John Doe', email: 'john@example.com', status: 'Active' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', status: 'Pending' },
-    { id: 3, name: 'Mike Johnson', email: 'mike@example.com', status: 'Active' },
-    { id: 4, name: 'Sarah Wilson', email: 'sarah@example.com', status: 'Completed' }
-  ])
+
 
   const responseTypes = ['Text response', 'Multiple choice', 'Rating scale', 'Yes/No', 'Date picker']
 
@@ -205,7 +210,16 @@ const Surveys = () => {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 md:gap-6 xl:px-10">
+    <div className="min-h-screen bg-gray-50">
+      <ClientAdminHeader 
+        profile={profile} 
+        onProfileEdit={onProfileEdit} 
+        onLogout={onLogout} 
+        onCreateSurvey={onNavigateToSurveys}
+        onNavigateToSurveys={onNavigateToSurveys}
+      />
+      <div className="pt-20 p-4 sm:p-6 md:p-8">
+        <div className="flex flex-col lg:flex-row gap-4 md:gap-6 xl:px-10">
       <div className="flex-1 min-w-0">
         <div className="mb-4 md:mb-6">
           <h1 className="text-lg md:text-xl lg:text-2xl xl:text-3xl font-medium">Create Survey Questionnaire</h1>
@@ -336,29 +350,7 @@ const Surveys = () => {
           </div>
         </div>
 
-        {/* Survey Users List */}
-        <div className="mt-6">
-          <h2 className="text-base md:text-lg lg:text-xl font-semibold mb-4">Survey Users</h2>
-          <div className="bg-white shadow-md rounded border">
-            <div className="max-h-64 overflow-y-auto">
-              {surveyUsers.map((user) => (
-                <div key={user.id} className="flex items-center justify-between p-3 border-b last:border-b-0">
-                  <div>
-                    <p className="font-medium text-sm">{user.name}</p>
-                    <p className="text-xs text-gray-500">{user.email}</p>
-                  </div>
-                  <span className={`px-2 py-1 text-xs rounded ${
-                    user.status === 'Active' ? 'bg-green-100 text-green-800' :
-                    user.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-blue-100 text-blue-800'
-                  }`}>
-                    {user.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+
 
         {/* Delete Confirmation Modal */}
         <Dialog open={isDeleteModalOpen} onOpenChange={() => {}}>
@@ -506,9 +498,8 @@ const Surveys = () => {
         </Dialog>
       </div>
       
-      {/* <div className="w-full lg:w-80 lg:flex-shrink-0">
-        <Sidebar />
-      </div> */}
+        </div>
+      </div>
     </div>
   )
 }

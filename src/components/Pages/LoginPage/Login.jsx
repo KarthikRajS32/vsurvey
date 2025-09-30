@@ -19,7 +19,18 @@ const Login = ({ onLogin }) => {
       if (email === 'superadmin@vsurvey.com' && password === 'superadmin123') {
         onLogin('superadmin')
       } else {
-        onLogin('client')
+        // Check Client Admin credentials
+        const clientAdmins = JSON.parse(localStorage.getItem('clientAdmins') || '[]')
+        const clientAdmin = clientAdmins.find(admin => admin.email === email)
+        
+        if (clientAdmin) {
+          const profileData = localStorage.getItem(`profile_${email}`)
+          const isFirstTime = !profileData
+          const profile = profileData ? JSON.parse(profileData) : null
+          onLogin('client', { email, isFirstTime, profile })
+        } else {
+          alert('Invalid email or password')
+        }
       }
     }, 1000)
   }

@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import Sidebar from "./AssignedSurveys"
+import ClientAdminHeader from "./ClientAdminHeader"
 
 
-const Surveys = () => {
+const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
   const [questions, setQuestions] = useState([])
   const [surveyName, setSurveyName] = useState('')
   const [surveys, setSurveys] = useState([])
@@ -15,35 +15,35 @@ const Surveys = () => {
       setQuestions(JSON.parse(savedQuestions))
     }
     
-    const savedSurveys = localStorage.getItem('createdSurveys')
-    if (savedSurveys) {
-      setSurveys(JSON.parse(savedSurveys))
+    // Get current client admin email and load their surveys
+    const currentUser = localStorage.getItem('currentClientAdmin')
+    if (currentUser) {
+      const { email } = JSON.parse(currentUser)
+      const surveyKey = `createdSurveys_${email}`
+      const savedSurveys = localStorage.getItem(surveyKey)
+      if (savedSurveys) {
+        setSurveys(JSON.parse(savedSurveys))
+      }
     }
     
     // Listen for storage changes to sync surveys across components
-    const handleStorageChange = () => {
-      const updatedSurveys = localStorage.getItem('createdSurveys')
-      if (updatedSurveys) {
-        setSurveys(JSON.parse(updatedSurveys))
-      } else {
-        setSurveys([])
-      }
-    }
-    
     const handleSurveysUpdated = () => {
-      const updatedSurveys = localStorage.getItem('createdSurveys')
-      if (updatedSurveys) {
-        setSurveys(JSON.parse(updatedSurveys))
-      } else {
-        setSurveys([])
+      const currentUser = localStorage.getItem('currentClientAdmin')
+      if (currentUser) {
+        const { email } = JSON.parse(currentUser)
+        const surveyKey = `createdSurveys_${email}`
+        const updatedSurveys = localStorage.getItem(surveyKey)
+        if (updatedSurveys) {
+          setSurveys(JSON.parse(updatedSurveys))
+        } else {
+          setSurveys([])
+        }
       }
     }
     
-    window.addEventListener('storage', handleStorageChange)
     window.addEventListener('surveysUpdated', handleSurveysUpdated)
     
     return () => {
-      window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('surveysUpdated', handleSurveysUpdated)
     }
   }, [])
@@ -67,9 +67,14 @@ const Surveys = () => {
   }
 
   const saveSurveysToStorage = (updatedSurveys) => {
-    localStorage.setItem('createdSurveys', JSON.stringify(updatedSurveys))
-    // Trigger custom event to sync across components in same tab
-    window.dispatchEvent(new Event('surveysUpdated'))
+    const currentUser = localStorage.getItem('currentClientAdmin')
+    if (currentUser) {
+      const { email } = JSON.parse(currentUser)
+      const surveyKey = `createdSurveys_${email}`
+      localStorage.setItem(surveyKey, JSON.stringify(updatedSurveys))
+      // Trigger custom event to sync across components in same tab
+      window.dispatchEvent(new Event('surveysUpdated'))
+    }
   }
 
   const createSurvey = () => {
@@ -103,7 +108,15 @@ const Surveys = () => {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 md:gap-6 xl:px-10">
+    <div className="min-h-screen bg-gray-50">
+      <ClientAdminHeader 
+        profile={profile} 
+        onProfileEdit={onProfileEdit} 
+        onLogout={onLogout} 
+        onNavigateToSurveys={onNavigateToSurveys}
+      />
+      <div className="pt-20 p-4 sm:p-6 md:p-8">
+        <div className="flex flex-col lg:flex-row gap-4 md:gap-6 xl:px-10">
       <div className="flex-1 min-w-0">
         <div className="mb-4 md:mb-6">
           <h1 className="text-lg md:text-xl lg:text-2xl xl:text-3xl font-medium">Create New Survey</h1>
@@ -202,8 +215,7 @@ const Surveys = () => {
         </div> */}
       </div>
       
-      <div className="w-full lg:w-80 lg:flex-shrink-0">
-        <Sidebar />
+        </div>
       </div>
 
       {showSurveySelectModal && (
