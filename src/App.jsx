@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import Sidebar from './components/Pages/SideBar/Sidebar'
 import TopBar from './components/Pages/TapBar/TopBar'
-import SurveyPersonnel from './components/Pages/Client/CreateUsers'
-import Surveys from './components/Pages/Client/CreateQuestion'
+import SurveyPersonnel from './components/Pages/Client/CreateUsersAPI'
+import Surveys from './components/Pages/Client/CreateQuestionAPI'
 import CreateSurvey from './components/Pages/Client/CreateSurveys'
 import Login from './components/Pages/LoginPage/Login'
 import { supabase } from './lib/supabaseClient'
@@ -10,6 +10,7 @@ import AssignUser from "./components/Pages/Client/AssignUser";
 import SuperAdminDashboard from "./components/Pages/SuperAdmin/SuperAdminDashboard";
 import ProfileSetup from './components/Pages/Client/ProfileSetup';
 import ClientAdminHeader from './components/Pages/Client/ClientAdminHeader';
+import { auth } from './firebase'
 
 
 function App() {
@@ -57,6 +58,15 @@ function App() {
       window.history.replaceState({}, document.title, window.location.pathname)
     }
 
+    // Listen for Firebase auth state changes
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        setClientAdminData({ email: user.email, isFirstTime: false, profile: null })
+        setUserType('client')
+        setSession(true)
+      }
+    })
+
     // Check for existing client admin session
     const savedUser = localStorage.getItem('currentClientAdmin')
     if (savedUser) {
@@ -77,7 +87,10 @@ function App() {
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      unsubscribe()
+      subscription.unsubscribe()
+    }
   }, [])
 
   const renderContent = () => {
