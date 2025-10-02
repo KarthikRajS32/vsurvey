@@ -3,6 +3,7 @@ import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Card, CardContent } from '../../ui/card'
 import loginImage from '../../../assets/1.png'
+import authService from '../../../services/authService'
 
 const Login = ({ onLogin }) => {
   const [email, setEmail] = useState('')
@@ -13,26 +14,35 @@ const Login = ({ onLogin }) => {
     e.preventDefault()
     setIsLoading(true)
     
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
       // Check for super admin credentials
       if (email === 'superadmin@vsurvey.com' && password === 'superadmin123') {
         onLogin('superadmin')
-      } else {
-        // Check Client Admin credentials
-        const clientAdmins = JSON.parse(localStorage.getItem('clientAdmins') || '[]')
-        const clientAdmin = clientAdmins.find(admin => admin.email === email)
-        
-        if (clientAdmin) {
-          const profileData = localStorage.getItem(`profile_${email}`)
-          const isFirstTime = !profileData
-          const profile = profileData ? JSON.parse(profileData) : null
-          onLogin('client', { email, isFirstTime, profile })
-        } else {
-          alert('Invalid email or password')
-        }
+        return
       }
-    }, 1000)
+
+      // Use Firebase authentication for client admins
+      const result = await authService.signIn(email, password)
+      
+      if (result.success) {
+        // Store token for API calls
+        const token = await result.user.getIdToken()
+        localStorage.setItem('firebaseToken', token)
+        
+        // Wait a moment for Firebase auth state to update
+        setTimeout(() => {
+          onLogin('client', { 
+            email, 
+            isFirstTime: false, 
+            profile: null 
+          })
+        }, 1000)
+      }
+    } catch (error) {
+      alert('Invalid email or password: ' + error.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
