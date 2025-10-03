@@ -7,7 +7,7 @@ import CreateSurvey from './components/Pages/Client/CreateSurveys'
 import Login from './components/Pages/LoginPage/Login'
 import { supabase } from './lib/supabaseClient'
 import AssignUser from "./components/Pages/Client/AssignUser";
-import SuperAdminDashboard from "./components/Pages/SuperAdmin/SuperAdminDashboard";
+import SuperAdminDashboard from "./components/Pages/SuperAdmin/SuperAdminDashboardAPI";
 import ProfileSetup from './components/Pages/Client/ProfileSetup';
 import ClientAdminHeader from './components/Pages/Client/ClientAdminHeader';
 import { auth } from './firebase'
@@ -61,6 +61,22 @@ function App() {
     // Listen for Firebase auth state changes
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
+        console.log('Auth state changed:', user.email)
+        
+        // Check if it's superadmin by email
+        if (user.email === 'superadmin@vsurvey.com') {
+          console.log('SuperAdmin detected, staying on SuperAdmin dashboard')
+          return
+        }
+        
+        // Skip navigation if we're in the middle of creating a user
+        if (window.isCreatingUser) {
+          console.log('User creation in progress, skipping navigation')
+          return
+        }
+        
+        console.log('Client user detected, redirecting to client dashboard')
+        // For regular clients
         setClientAdminData({ email: user.email, isFirstTime: false, profile: null })
         setUserType('client')
         setSession(true)
