@@ -68,9 +68,9 @@ const Login = ({ onLogin }) => {
               </p>
             </div>
             
-            <div className="relative group">
+            <div className="relative group lg:pl-30 ">
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-200 to-indigo-200 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
-              <div className="relative w-80 h-80 mx-auto lg:mx-0 rounded-2xl overflow-hidden shadow-xl">
+              <div className="relative w-70 h-70 mx-auto lg:mx-0 rounded-2xl overflow-hidden shadow-xl">
                 <img 
                   src={loginImage} 
                   alt="Survey Platform" 

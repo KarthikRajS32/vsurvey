@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { User, Upload } from "@/components/ui/icons"
 
-const ProfileSetup = ({ email, onComplete, isEdit = false, existingProfile = null }) => {
+const ProfileSetup = ({ email, onComplete, isEdit = false, existingProfile = null, setActiveTab }) => {
   const [formData, setFormData] = useState({
     profileImage: existingProfile?.profileImage || null,
     name: existingProfile?.name || '',
@@ -45,6 +45,9 @@ const ProfileSetup = ({ email, onComplete, isEdit = false, existingProfile = nul
     }
     
     localStorage.setItem(`profile_${email}`, JSON.stringify(profileData))
+    if (!isEdit && setActiveTab) {
+      setActiveTab('Users')
+    }
     onComplete(profileData)
   }
 
