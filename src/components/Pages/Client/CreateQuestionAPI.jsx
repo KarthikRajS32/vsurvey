@@ -368,6 +368,8 @@ import { Label } from "@/components/ui/label";
 import { Edit3, X, Trash2 } from "lucide-react";
 import { useQuestions } from "../../../hooks/useApi";
 import authService from "../../../services/authService";
+import { db } from "../../../firebase";
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
 
 const CreateQuestionAPI = ({
   profile,
@@ -391,6 +393,7 @@ const CreateQuestionAPI = ({
   const [ratingScale, setRatingScale] = useState("1-5");
   const [options, setOptions] = useState([""]);
   const [message, setMessage] = useState("");
+  const [firebaseQuestions, setFirebaseQuestions] = useState([]);
 
   // Edit modal states
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -423,8 +426,27 @@ const CreateQuestionAPI = ({
   const loadQuestions = async () => {
     try {
       await fetchQuestions();
+      await loadFirebaseQuestions();
     } catch (err) {
       console.error("Failed to load questions:", err);
+    }
+  };
+
+  const loadFirebaseQuestions = async () => {
+    try {
+      const clientEmail = profile?.email || "admin@example.com";
+      const questionsRef = collection(db, "client_questions", clientEmail, "questions");
+      const snapshot = await getDocs(questionsRef);
+      const fbQuestions = [];
+      snapshot.forEach((doc) => {
+        fbQuestions.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+      setFirebaseQuestions(fbQuestions);
+    } catch (error) {
+      console.error("Error loading Firebase questions:", error);
     }
   };
 
@@ -469,8 +491,16 @@ const CreateQuestionAPI = ({
         is_required: true,
         order: 0,
         created_by: profile?.email || "admin@example.com",
+        createdAt: new Date().toISOString(),
       };
 
+      // Save to Firebase in client-specific collection
+      const clientEmail = profile?.email || "admin@example.com";
+      const questionsRef = collection(db, "client_questions", clientEmail, "questions");
+      await addDoc(questionsRef, questionData);
+      console.log("Question saved to Firebase successfully for client:", clientEmail);
+
+      // Also save to backend API
       await createQuestion(questionData);
 
       // Reset form
@@ -480,6 +510,9 @@ const CreateQuestionAPI = ({
       setOptions([""]);
       setMessage("Question created successfully!");
       setTimeout(() => setMessage(""), 3000);
+      
+      // Refresh Firebase questions list
+      await loadFirebaseQuestions();
     } catch (err) {
       console.error("Create question error:", err);
       setMessage(err.message || "Failed to create question");
@@ -620,7 +653,7 @@ const CreateQuestionAPI = ({
                 </div>
               )}
 
-              <Button type="submit" disabled={loading} className="w-full">
+              <Button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700">
                 {loading ? "Creating..." : "Create Question"}
               </Button>
             </form>
@@ -634,7 +667,7 @@ const CreateQuestionAPI = ({
             {error && <p className="text-red-600">Error: {error}</p>}
 
             <div className="space-y-4 max-h-96 overflow-y-auto">
-              {questions.map((question) => (
+              {firebaseQuestions.map((question) => (
                 <div key={question.id} className="border rounded-lg p-4">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -647,7 +680,7 @@ const CreateQuestionAPI = ({
                           <p className="text-sm text-gray-600">Options:</p>
                           <ul className="text-sm text-gray-700 ml-4">
                             {question.options.map((option, idx) => (
-                              <li key={idx}>• {option}</li>
+                              <li key={idx}>• {typeof option === 'string' ? option : option.text}</li>
                             ))}
                           </ul>
                         </div>
@@ -696,7 +729,7 @@ const CreateQuestionAPI = ({
               />
             </div>
             <div className="flex gap-2">
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading} className="bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700">
                 {loading ? "Updating..." : "Update Question"}
               </Button>
               <Button

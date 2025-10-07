@@ -822,7 +822,7 @@ const SuperAdminDashboardAPI = () => {
                       />
                     </div>
 
-                    <Button type="submit" disabled={loading} className="w-full">
+                    <Button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700">
                       {loading ? "Creating..." : "Create Client Admin"}
                     </Button>
                   </form>
