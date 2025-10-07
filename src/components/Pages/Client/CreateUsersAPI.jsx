@@ -843,7 +843,7 @@ const CreateUsersAPI = ({
 
               <Button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700"
+                className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
                 disabled={loading}
               >
                 {loading ? "Creating..." : "Create User"}
@@ -1063,7 +1063,7 @@ const CreateUsersAPI = ({
             <div className="flex gap-2 pt-4">
               <Button
                 type="submit"
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
+                className="flex-1 bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
                 disabled={loading}
               >
                 {loading ? "Updating..." : "Update User"}
@@ -1099,7 +1099,7 @@ const CreateUsersAPI = ({
             <div className="flex gap-2 pt-4">
               <Button
                 onClick={confirmDelete}
-                className="flex-1 bg-red-600 hover:bg-red-700"
+                className="flex-1 bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
                 disabled={loading}
               >
                 {loading ? "Deleting..." : "Delete User"}

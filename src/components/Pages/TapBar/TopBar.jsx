@@ -150,7 +150,7 @@ const TopBar = ({
           {!isSuperAdmin && (
             <Button
               onClick={() => setActiveTab("surveys")}
-              className="bg-purple-700 text-xs sm:text-sm px-3 sm:px-4 lg:px-6 py-2 sm:py-3"
+              className="bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 text-xs sm:text-sm px-3 sm:px-4 lg:px-6 py-2 sm:py-3"
             >
               <span className="hidden sm:inline">+ Create Survey</span>
               <span className="sm:hidden">+ Survey</span>

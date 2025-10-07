@@ -340,6 +340,8 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { db } from "../../../firebase";
+import { collection, getDocs } from "firebase/firestore";
 
 const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
   const [questions, setQuestions] = useState([]);
@@ -347,9 +349,23 @@ const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
   const [surveys, setSurveys] = useState([]);
 
   useEffect(() => {
+    // Load questions from Firebase
+    loadFirebaseQuestions();
+    
+    // Also check localStorage for backward compatibility
     const savedQuestions = localStorage.getItem("surveyQuestions");
     if (savedQuestions) {
-      setQuestions(JSON.parse(savedQuestions));
+      const localQuestions = JSON.parse(savedQuestions);
+      setQuestions(prev => {
+        // Merge Firebase and localStorage questions, avoiding duplicates
+        const combined = [...prev];
+        localQuestions.forEach(localQ => {
+          if (!combined.find(q => q.id === localQ.id)) {
+            combined.push(localQ);
+          }
+        });
+        return combined;
+      });
     }
 
     // Get current client admin email and load their surveys
@@ -391,6 +407,24 @@ const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
   const [selectedSurveys, setSelectedSurveys] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showPersonnelModal, setShowPersonnelModal] = useState(false);
+
+  const loadFirebaseQuestions = async () => {
+    try {
+      const clientEmail = profile?.email || "admin@example.com";
+      const questionsRef = collection(db, "client_questions", clientEmail, "questions");
+      const snapshot = await getDocs(questionsRef);
+      const fbQuestions = [];
+      snapshot.forEach((doc) => {
+        fbQuestions.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+      setQuestions(fbQuestions);
+    } catch (error) {
+      console.error("Error loading Firebase questions:", error);
+    }
+  };
 
   const toggleQuestionSelection = (questionId) => {
     setSelectedQuestions((prev) =>
@@ -470,7 +504,7 @@ const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
                 />
                 <button
                   onClick={createSurvey}
-                  className="bg-black text-white px-4 py-2 rounded-[10px] text-sm whitespace-nowrap"
+                  className="bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2 rounded-[10px] text-sm whitespace-nowrap"
                 >
                   + Create Survey
                 </button>
@@ -483,7 +517,7 @@ const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
               <Button
                 onClick={() => setShowSurveySelectModal(true)}
                 disabled={selectedQuestions.length === 0}
-                className="bg-black text-white text-sm px-4 py-2"
+                className="bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 text-white text-sm px-4 py-2"
               >
                 Select Survey
               </Button>
@@ -529,7 +563,7 @@ const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
                                   className="flex-shrink-0"
                                 />
                                 <span className="text-xs break-words">
-                                  {option}
+                                  {typeof option === 'string' ? option : option.text}
                                 </span>
                               </div>
                             ))}
@@ -680,7 +714,7 @@ const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
                   setShowSurveySelectModal(false);
                   // alert(`Questions assigned to ${selectedSurveys.length} survey${selectedSurveys.length > 1 ? 's' : ''} successfully!`)
                 }}
-                className="bg-black text-white text-xs"
+                className="bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 text-white text-xs"
                 disabled={
                   selectedSurveys.length === 0 ||
                   surveys.length === 0 ||
