@@ -13,9 +13,68 @@ from google.cloud.firestore_v1 import FieldFilter
 class AssignmentService:
     def __init__(self):
         self.db = get_db()
-        self.collection = self.db.collection(COLLECTIONS["survey_assignments"])
         self.survey_service = SurveyService()
         self.user_service = UserService()
+    
+    async def find_client_by_email(self, client_email: str):
+        """Find client document ID by email"""
+        try:
+            print(f"DEBUG: Searching for client with email: {client_email}")
+            # Search through all superadmin documents
+            superadmin_collection = self.db.collection("superadmin")
+            superadmin_docs = superadmin_collection.stream()
+            
+            for superadmin_doc in superadmin_docs:
+                print(f"DEBUG: Checking superadmin: {superadmin_doc.id}")
+                # Search through clients in this superadmin
+                clients_collection = superadmin_doc.reference.collection("clients")
+                clients_docs = clients_collection.where("email", "==", client_email).stream()
+                
+                for client_doc in clients_docs:
+                    print(f"DEBUG: Found client {client_doc.id} in superadmin {superadmin_doc.id}")
+                    return {
+                        "superadmin_id": superadmin_doc.id,
+                        "client_id": client_doc.id
+                    }
+            
+            print(f"DEBUG: Client not found")
+            return None
+        except Exception as e:
+            print(f"ERROR finding client: {e}")
+            return None
+    
+    async def ensure_client_exists(self, client_info: dict, client_email: str):
+        """Ensure client document exists in Firestore"""
+        try:
+            client_doc_ref = self.db.collection("superadmin").document(client_info["superadmin_id"]).collection("clients").document(client_info["client_id"])
+            client_doc = client_doc_ref.get()
+            
+            if not client_doc.exists:
+                # Create client document if it doesn't exist
+                client_data = {
+                    "email": client_email,
+                    "created_at": datetime.utcnow(),
+                    "status": "active"
+                }
+                client_doc_ref.set(client_data)
+                print(f"DEBUG: Created client document for {client_email} with ID {client_info['client_id']}")
+        except Exception as e:
+            print(f"ERROR ensuring client exists: {e}")
+    
+    async def get_client_assignments_collection(self, client_email: str):
+        """Get the survey_assignments collection for a specific client"""
+        client_info = await self.find_client_by_email(client_email)
+        
+        if not client_info:
+            raise ValueError(f"Failed to create/find client admin: {client_email}")
+        
+        # Ensure client document exists
+        await self.ensure_client_exists(client_info, client_email)
+        
+        path = f"superadmin/{client_info['superadmin_id']}/clients/{client_info['client_id']}/survey_assignments"
+        print(f"DEBUG: Using Firestore path: {path}")
+        
+        return self.db.collection("superadmin").document(client_info["superadmin_id"]).collection("clients").document(client_info["client_id"]).collection("survey_assignments")
 
     async def assign_survey_to_users(self, assignment_data: SurveyAssignmentCreate, assigned_by: str) -> List[SurveyAssignment]:
         """Assign a survey to multiple users"""
@@ -23,6 +82,8 @@ class AssignmentService:
         survey = await self.survey_service.get_survey_by_id(assignment_data.survey_id, assigned_by)
         if not survey:
             raise ValueError("Survey not found")
+        
+        collection = await self.get_client_assignments_collection(assigned_by)
         
         # Verify all users exist and belong to the client admin
         assignments = []
@@ -32,10 +93,10 @@ class AssignmentService:
                 continue  # Skip invalid users
             
             # Check if assignment already exists
-            existing_docs = self.collection.where(
-                filter=FieldFilter("survey_id", "==", assignment_data.survey_id)
+            existing_docs = collection.where(
+                "survey_id", "==", assignment_data.survey_id
             ).where(
-                filter=FieldFilter("user_id", "==", user_id)
+                "user_id", "==", user_id
             ).limit(1).get()
             
             if len(list(existing_docs)) > 0:
@@ -54,8 +115,8 @@ class AssignmentService:
                 assigned_by=assigned_by
             )
             
-            # Save to Firestore
-            self.collection.document(assignment_id).set(assignment.dict())
+            # Save to client-specific Firestore collection
+            collection.document(assignment_id).set(assignment.dict())
             assignments.append(assignment)
         
         return assignments
@@ -70,23 +131,23 @@ class AssignmentService:
         is_active: Optional[bool] = None
     ) -> PaginatedResponse:
         """Get paginated list of assignments"""
-        query = self.collection.where(filter=FieldFilter("assigned_by", "==", assigned_by))
+        collection = await self.get_client_assignments_collection(assigned_by)
+        query = collection.where("assigned_by", "==", assigned_by)
         
         # Apply filters
         if survey_id:
-            query = query.where(filter=FieldFilter("survey_id", "==", survey_id))
+            query = query.where("survey_id", "==", survey_id)
         if user_id:
-            query = query.where(filter=FieldFilter("user_id", "==", user_id))
+            query = query.where("user_id", "==", user_id)
         if is_active is not None:
-            query = query.where(filter=FieldFilter("is_active", "==", is_active))
+            query = query.where("is_active", "==", is_active)
         
         # Get total count
         total_docs = query.get()
         total = len(list(total_docs))
         
-        # Apply pagination
-        offset = (page - 1) * size
-        docs = query.order_by("assigned_at", direction="DESCENDING").offset(offset).limit(size).get()
+        # Get documents without ordering (to avoid index requirement)
+        docs = query.limit(size * page).get()
         
         assignments = []
         for doc in docs:
@@ -94,10 +155,15 @@ class AssignmentService:
             assignment_data["id"] = doc.id
             assignments.append(SurveyAssignment(**assignment_data))
         
+        # Simple client-side pagination
+        start_idx = (page - 1) * size
+        end_idx = start_idx + size
+        paginated_assignments = assignments[start_idx:end_idx]
+        
         pages = (total + size - 1) // size
         
         return PaginatedResponse(
-            items=[assignment.dict() for assignment in assignments],
+            items=[assignment.dict() for assignment in paginated_assignments],
             total=total,
             page=page,
             size=size,
@@ -111,10 +177,11 @@ class AssignmentService:
         if not survey:
             return []
         
-        docs = self.collection.where(
-            filter=FieldFilter("survey_id", "==", survey_id)
+        collection = await self.get_client_assignments_collection(assigned_by)
+        docs = collection.where(
+            "survey_id", "==", survey_id
         ).where(
-            filter=FieldFilter("assigned_by", "==", assigned_by)
+            "assigned_by", "==", assigned_by
         ).get()
         
         assignments = []
@@ -132,10 +199,11 @@ class AssignmentService:
         if not user:
             return []
         
-        docs = self.collection.where(
-            filter=FieldFilter("user_id", "==", user_id)
+        collection = await self.get_client_assignments_collection(assigned_by)
+        docs = collection.where(
+            "user_id", "==", user_id
         ).where(
-            filter=FieldFilter("assigned_by", "==", assigned_by)
+            "assigned_by", "==", assigned_by
         ).get()
         
         assignments = []
@@ -148,7 +216,8 @@ class AssignmentService:
 
     async def update_assignment(self, assignment_id: str, assignment_data: SurveyAssignmentUpdate, assigned_by: str) -> Optional[SurveyAssignment]:
         """Update an assignment"""
-        doc_ref = self.collection.document(assignment_id)
+        collection = await self.get_client_assignments_collection(assigned_by)
+        doc_ref = collection.document(assignment_id)
         doc = doc_ref.get()
         
         if not doc.exists:
@@ -180,7 +249,8 @@ class AssignmentService:
 
     async def delete_assignment(self, assignment_id: str, assigned_by: str) -> bool:
         """Delete an assignment"""
-        doc_ref = self.collection.document(assignment_id)
+        collection = await self.get_client_assignments_collection(assigned_by)
+        doc_ref = collection.document(assignment_id)
         doc = doc_ref.get()
         
         if not doc.exists:
@@ -200,12 +270,13 @@ class AssignmentService:
     async def remove_user_from_survey(self, survey_id: str, user_id: str, assigned_by: str) -> bool:
         """Remove a user from a survey"""
         # Find the assignment
-        docs = self.collection.where(
-            filter=FieldFilter("survey_id", "==", survey_id)
+        collection = await self.get_client_assignments_collection(assigned_by)
+        docs = collection.where(
+            "survey_id", "==", survey_id
         ).where(
-            filter=FieldFilter("user_id", "==", user_id)
+            "user_id", "==", user_id
         ).where(
-            filter=FieldFilter("assigned_by", "==", assigned_by)
+            "assigned_by", "==", assigned_by
         ).limit(1).get()
         
         docs_list = list(docs)

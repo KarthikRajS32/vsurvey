@@ -434,8 +434,8 @@ const CreateQuestionAPI = ({
 
   const loadFirebaseQuestions = async () => {
     try {
-      const clientEmail = profile?.email || "admin@example.com";
-      const questionsRef = collection(db, "client_questions", clientEmail, "questions");
+      const clientId = profile?.clientId || profile?.id || "8v3Mmi2BJ60ehQ9Dhqo3";
+      const questionsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions");
       const snapshot = await getDocs(questionsRef);
       const fbQuestions = [];
       snapshot.forEach((doc) => {
@@ -495,10 +495,10 @@ const CreateQuestionAPI = ({
       };
 
       // Save to Firebase in client-specific collection
-      const clientEmail = profile?.email || "admin@example.com";
-      const questionsRef = collection(db, "client_questions", clientEmail, "questions");
+      const clientId = profile?.clientId || profile?.id || "8v3Mmi2BJ60ehQ9Dhqo3";
+      const questionsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions");
       await addDoc(questionsRef, questionData);
-      console.log("Question saved to Firebase successfully for client:", clientEmail);
+      console.log("Question saved to Firebase successfully for client:", clientId);
 
       // Also save to backend API
       await createQuestion(questionData);
@@ -534,11 +534,32 @@ const CreateQuestionAPI = ({
     e.preventDefault();
 
     try {
+      // Update in Firebase
+      const clientId = profile?.clientId || profile?.id || "8v3Mmi2BJ60ehQ9Dhqo3";
+      const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", editingQuestion.id);
+      await updateDoc(questionRef, {
+        text: editFormData.text,
+        type: editFormData.type,
+        options: editFormData.type === "multiple_choice" 
+          ? editFormData.options.filter(opt => opt.trim()).map((opt, index) => ({
+              id: `opt_${Date.now()}_${index}`,
+              text: typeof opt === 'string' ? opt.trim() : opt.text?.trim() || '',
+              order: index,
+            }))
+          : [],
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Also update backend API
       await updateQuestion(editingQuestion.id, editFormData);
+      
       setIsEditModalOpen(false);
       setEditingQuestion(null);
       setMessage("Question updated successfully!");
       setTimeout(() => setMessage(""), 3000);
+      
+      // Refresh Firebase questions list
+      await loadFirebaseQuestions();
     } catch (err) {
       setMessage(err.message || "Failed to update question");
       setTimeout(() => setMessage(""), 5000);
@@ -712,7 +733,7 @@ const CreateQuestionAPI = ({
 
       {/* Edit Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Question</DialogTitle>
           </DialogHeader>
@@ -728,6 +749,68 @@ const CreateQuestionAPI = ({
                 required
               />
             </div>
+            
+            <div>
+              <Label htmlFor="editResponseType">Response Type</Label>
+              <select
+                id="editResponseType"
+                className="w-full p-3 border text-sm rounded-[5px] border-gray-400 focus:outline-none focus:ring-1 focus:ring-black"
+                value={editFormData.type}
+                onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value, options: e.target.value === 'multiple_choice' ? editFormData.options : [] })}
+                required
+              >
+                <option value="">Select response type</option>
+                <option value="multiple_choice">Multiple Choice</option>
+                <option value="text">Text</option>
+                <option value="rating">Rating</option>
+                <option value="yes_no">Yes/No</option>
+              </select>
+            </div>
+
+            {editFormData.type === "multiple_choice" && (
+              <div>
+                <Label>Options</Label>
+                {(editFormData.options || ['']).map((option, index) => (
+                  <div key={index} className="flex gap-2 mt-2">
+                    <Input
+                      value={typeof option === 'string' ? option : option.text || ''}
+                      onChange={(e) => {
+                        const newOptions = [...(editFormData.options || [''])];
+                        newOptions[index] = e.target.value;
+                        setEditFormData({ ...editFormData, options: newOptions });
+                      }}
+                      placeholder={`Option ${index + 1}`}
+                    />
+                    {(editFormData.options || ['']).length > 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newOptions = (editFormData.options || ['']).filter((_, i) => i !== index);
+                          setEditFormData({ ...editFormData, options: newOptions });
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const newOptions = [...(editFormData.options || ['']), ''];
+                    setEditFormData({ ...editFormData, options: newOptions });
+                  }}
+                  className="mt-2"
+                >
+                  Add Option
+                </Button>
+              </div>
+            )}
+            
             <div className="flex gap-2">
               <Button type="submit" disabled={loading} className="bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700">
                 {loading ? "Updating..." : "Update Question"}

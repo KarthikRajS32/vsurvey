@@ -32,28 +32,46 @@ class QuestionService:
                         "client_id": client_doc.id
                     }
             
-            print(f"DEBUG: Client not found, using fallback")
-            # If not found, return default structure
-            return {
-                "superadmin_id": "U0UjGVvDJoDbLtWAhyjp",
-                "client_id": "Er2LQlzj052bKwYXvUYG"
-            }
+            print(f"DEBUG: Client not found")
+            return None
         except Exception as e:
             print(f"ERROR finding client: {e}")
-            # Fallback to default
-            return {
-                "superadmin_id": "U0UjGVvDJoDbLtWAhyjp", 
-                "client_id": "Er2LQlzj052bKwYXvUYG"
-            }
+            return None
 
+    async def ensure_client_exists(self, client_info: dict, client_email: str):
+        """Ensure client document exists in Firestore"""
+        try:
+            client_doc_ref = self.db.collection("superadmin").document(client_info["superadmin_id"]).collection("clients").document(client_info["client_id"])
+            client_doc = client_doc_ref.get()
+            
+            if not client_doc.exists:
+                # Create client document if it doesn't exist
+                client_data = {
+                    "email": client_email,
+                    "created_at": datetime.utcnow(),
+                    "status": "active"
+                }
+                client_doc_ref.set(client_data)
+                print(f"DEBUG: Created client document for {client_email} with ID {client_info['client_id']}")
+        except Exception as e:
+            print(f"ERROR ensuring client exists: {e}")
+    
     async def get_client_questions_collection(self, client_email: str):
         """Get the questions collection for a specific client"""
         client_info = await self.find_client_by_email(client_email)
         
+        if not client_info:
+            raise ValueError(f"Failed to create/find client admin: {client_email}")
+        
+        # Ensure client document exists
+        await self.ensure_client_exists(client_info, client_email)
+        
         path = f"superadmin/{client_info['superadmin_id']}/clients/{client_info['client_id']}/questions"
         print(f"DEBUG: Using Firestore path: {path}")
         
-        return self.db.collection("superadmin").document(client_info["superadmin_id"]).collection("clients").document(client_info["client_id"]).collection("questions")
+        collection_ref = self.db.collection("superadmin").document(client_info["superadmin_id"]).collection("clients").document(client_info["client_id"]).collection("questions")
+        print(f"DEBUG: Collection reference path: {collection_ref._path}")
+        return collection_ref
 
     async def create_question(self, question_data: QuestionCreate, created_by: str) -> Question:
         """Create a new question"""
@@ -85,8 +103,9 @@ class QuestionService:
             print(f"DEBUG: Finding client collection for {created_by}")
             collection = await self.get_client_questions_collection(created_by)
             print(f"DEBUG: Got collection, saving question {question_id}")
+            print(f"DEBUG: Collection path: {collection._path}")
             collection.document(question_id).set(question.dict())
-            print(f"DEBUG: Question saved successfully")
+            print(f"DEBUG: Question saved successfully at path: {collection._path}/{question_id}")
         except Exception as e:
             print(f"ERROR: Failed to save question: {e}")
             import traceback

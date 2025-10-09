@@ -9,15 +9,77 @@ from google.cloud.firestore_v1 import FieldFilter
 class UserService:
     def __init__(self):
         self.db = get_db()
-        self.collection = self.db.collection(COLLECTIONS["users"])
+    
+    async def find_client_by_email(self, client_email: str):
+        """Find client document ID by email"""
+        try:
+            print(f"DEBUG: Searching for client with email: {client_email}")
+            # Search through all superadmin documents
+            superadmin_collection = self.db.collection("superadmin")
+            superadmin_docs = superadmin_collection.stream()
+            
+            for superadmin_doc in superadmin_docs:
+                print(f"DEBUG: Checking superadmin: {superadmin_doc.id}")
+                # Search through clients in this superadmin
+                clients_collection = superadmin_doc.reference.collection("clients")
+                clients_docs = clients_collection.where("email", "==", client_email).stream()
+                
+                for client_doc in clients_docs:
+                    print(f"DEBUG: Found client {client_doc.id} in superadmin {superadmin_doc.id}")
+                    return {
+                        "superadmin_id": superadmin_doc.id,
+                        "client_id": client_doc.id
+                    }
+            
+            print(f"DEBUG: Client not found")
+            return None
+        except Exception as e:
+            print(f"ERROR finding client: {e}")
+            return None
+    
+    async def ensure_client_exists(self, client_info: dict, client_email: str):
+        """Ensure client document exists in Firestore"""
+        try:
+            client_doc_ref = self.db.collection("superadmin").document(client_info["superadmin_id"]).collection("clients").document(client_info["client_id"])
+            client_doc = client_doc_ref.get()
+            
+            if not client_doc.exists:
+                # Create client document if it doesn't exist
+                client_data = {
+                    "email": client_email,
+                    "created_at": datetime.utcnow(),
+                    "status": "active"
+                }
+                client_doc_ref.set(client_data)
+                print(f"DEBUG: Created client document for {client_email} with ID {client_info['client_id']}")
+        except Exception as e:
+            print(f"ERROR ensuring client exists: {e}")
+    
+    async def get_client_users_collection(self, client_email: str):
+        """Get the users collection for a specific client"""
+        client_info = await self.find_client_by_email(client_email)
+        
+        if not client_info:
+            print(f"DEBUG: Client admin not found, returning empty collection for: {client_email}")
+            return self.db.collection("_non_existent_collection_")
+        
+        # Ensure client document exists
+        await self.ensure_client_exists(client_info, client_email)
+        
+        path = f"superadmin/{client_info['superadmin_id']}/clients/{client_info['client_id']}/users"
+        print(f"DEBUG: Using Firestore path: {path}")
+        
+        return self.db.collection("superadmin").document(client_info["superadmin_id"]).collection("clients").document(client_info["client_id"]).collection("users")
 
     async def create_user(self, user_data: UserCreate, created_by: str) -> User:
         """Create a new user"""
+        collection = await self.get_client_users_collection(created_by)
+        
         # Check if user with email already exists for this client admin
-        existing_users = self.collection.where(
-            filter=FieldFilter("email", "==", user_data.email)
+        existing_users = collection.where(
+            "email", "==", user_data.email
         ).where(
-            filter=FieldFilter("created_by", "==", created_by)
+            "created_by", "==", created_by
         ).limit(1).get()
         
         if len(list(existing_users)) > 0:
@@ -31,14 +93,15 @@ class UserService:
             id=user_id,
             full_name=user_data.full_name,
             email=user_data.email,
-            is_active=True,
+            is_active=False,
+            status="pending",
             created_at=now,
             updated_at=now,
             created_by=created_by
         )
         
-        # Save to Firestore
-        self.collection.document(user_id).set(user.dict())
+        # Save to client-specific Firestore collection
+        collection.document(user_id).set(user.dict())
         
         return user
 
@@ -51,7 +114,8 @@ class UserService:
         is_active: Optional[bool] = None
     ) -> PaginatedResponse:
         """Get paginated list of users"""
-        query = self.collection.where("created_by", "==", created_by)
+        collection = await self.get_client_users_collection(created_by)
+        query = collection.where("created_by", "==", created_by)
         
         # Apply filters
         if is_active is not None:
@@ -95,7 +159,8 @@ class UserService:
 
     async def get_user_by_id(self, user_id: str, created_by: str) -> Optional[User]:
         """Get user by ID"""
-        doc = self.collection.document(user_id).get()
+        collection = await self.get_client_users_collection(created_by)
+        doc = collection.document(user_id).get()
         
         if not doc.exists:
             return None
@@ -111,7 +176,8 @@ class UserService:
 
     async def update_user(self, user_id: str, user_data: UserUpdate, created_by: str) -> Optional[User]:
         """Update user"""
-        doc_ref = self.collection.document(user_id)
+        collection = await self.get_client_users_collection(created_by)
+        doc_ref = collection.document(user_id)
         doc = doc_ref.get()
         
         if not doc.exists:
@@ -125,10 +191,10 @@ class UserService:
         
         # Check for email uniqueness if email is being updated
         if user_data.email and user_data.email != current_data["email"]:
-            existing_users = self.collection.where(
-                filter=FieldFilter("email", "==", user_data.email)
+            existing_users = collection.where(
+                "email", "==", user_data.email
             ).where(
-                filter=FieldFilter("created_by", "==", created_by)
+                "created_by", "==", created_by
             ).limit(1).get()
             
             if len(list(existing_users)) > 0:
@@ -142,6 +208,8 @@ class UserService:
             update_data["email"] = user_data.email
         if user_data.is_active is not None:
             update_data["is_active"] = user_data.is_active
+        if user_data.status is not None:
+            update_data["status"] = user_data.status
         
         update_data["updated_at"] = datetime.utcnow()
         
@@ -157,7 +225,8 @@ class UserService:
 
     async def delete_user(self, user_id: str, created_by: str) -> bool:
         """Delete user"""
-        doc_ref = self.collection.document(user_id)
+        collection = await self.get_client_users_collection(created_by)
+        doc_ref = collection.document(user_id)
         doc = doc_ref.get()
         
         if not doc.exists:
@@ -176,7 +245,8 @@ class UserService:
 
     async def toggle_user_status(self, user_id: str, created_by: str) -> Optional[User]:
         """Toggle user active status"""
-        doc_ref = self.collection.document(user_id)
+        collection = await self.get_client_users_collection(created_by)
+        doc_ref = collection.document(user_id)
         doc = doc_ref.get()
         
         if not doc.exists:
@@ -188,10 +258,30 @@ class UserService:
         if user_data.get("created_by") != created_by:
             return None
         
-        # Toggle status
-        new_status = not user_data.get("is_active", True)
+        # Determine new status based on current status
+        current_status = user_data.get("status", "pending")
+        current_is_active = user_data.get("is_active", False)
+        
+        if current_status == "pending":
+            # Pending -> Active
+            new_status = "active"
+            new_is_active = True
+        elif current_status == "active":
+            # Active -> Inactive
+            new_status = "inactive"
+            new_is_active = False
+        elif current_status == "inactive":
+            # Inactive -> Active
+            new_status = "active"
+            new_is_active = True
+        else:
+            # Default toggle
+            new_is_active = not current_is_active
+            new_status = "active" if new_is_active else "inactive"
+        
         doc_ref.update({
-            "is_active": new_status,
+            "is_active": new_is_active,
+            "status": new_status,
             "updated_at": datetime.utcnow()
         })
         

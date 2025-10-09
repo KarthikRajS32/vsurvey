@@ -173,19 +173,26 @@ import AssignUser from "./components/Pages/Client/AssignUser";
 import SuperAdminDashboard from "./components/Pages/SuperAdmin/SuperAdminDashboardAPI";
 import ProfileSetup from "./components/Pages/Client/ProfileSetup";
 import ClientAdminHeader from "./components/Pages/Client/ClientAdminHeader";
-// import SetPasswordClientAdmin from "./components/Pages/EmailPasswordSet/SetPasswordClientAdmin";
-// import SetPasswordUser from "./components/Pages/EmailPasswordSet/SetPasswordUser";
+import SetPassword from "./components/Pages/EmailPasswordSet/SetPassword";
 import { auth } from "./firebase";
 
 function App() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState("personnel");
   const [session, setSession] = useState(() => {
-    return localStorage.getItem("currentSuperAdmin") || localStorage.getItem("currentClientAdmin") ? true : false;
+    return localStorage.getItem("currentSuperAdmin") || localStorage.getItem("currentClientAdmin") || localStorage.getItem("currentUser") ? true : false;
   });
   const [userType, setUserType] = useState(() => {
     if (localStorage.getItem("currentSuperAdmin")) return "superadmin";
     if (localStorage.getItem("currentClientAdmin")) return "client";
+    if (localStorage.getItem("currentUser")) return "user";
+    return null;
+  });
+  const [userData, setUserData] = useState(() => {
+    const savedUser = localStorage.getItem("currentUser");
+    if (savedUser) {
+      return JSON.parse(savedUser);
+    }
     return null;
   });
 
@@ -225,6 +232,7 @@ function App() {
     setShowProfileEdit(false);
     localStorage.removeItem("currentClientAdmin");
     localStorage.removeItem("currentSuperAdmin");
+    localStorage.removeItem("currentUser");
   };
 
   const handleProfileComplete = (profileData) => {
@@ -287,7 +295,13 @@ function App() {
 
         // Skip navigation if we're in the middle of creating a user
         if (window.isCreatingUser) {
-          console.log("User creation in progress, skipping navigation");
+          console.log("User creation in progress, skipping navigation and activation");
+          return;
+        }
+        
+        // Skip activation for newly created users - they should remain pending
+        if (window.justCreatedUser === user.email) {
+          console.log("Newly created user detected, skipping auto-activation:", user.email);
           return;
         }
 
@@ -390,7 +404,20 @@ function App() {
   if (isPasswordSetupPage) {
     return (
       <Routes>
-        {/* <Route path="/set-password" element={<SetPasswordUser />} /> */}
+        <Route path="/set-password" element={
+          <SetPassword onPasswordSet={(type) => {
+            if (type === 'superadmin') {
+              localStorage.setItem("currentSuperAdmin", JSON.stringify({ email: 'superadmin@vsurvey.com' }));
+              setUserType('superadmin');
+            } else if (type === 'client') {
+              setUserType('client');
+            } else if (type === 'user') {
+              setUserType('user');
+            }
+            setSession(true);
+            window.location.href = '/';
+          }} />
+        } />
       </Routes>
     );
   }
@@ -400,7 +427,20 @@ function App() {
       <Routes>
         <Route
           path="/set-password-admin"
-          // element={<SetPasswordClientAdmin />}
+          element={
+            <SetPassword onPasswordSet={(type) => {
+              if (type === 'superadmin') {
+                localStorage.setItem("currentSuperAdmin", JSON.stringify({ email: 'superadmin@vsurvey.com' }));
+                setUserType('superadmin');
+              } else if (type === 'client') {
+                setUserType('client');
+              } else if (type === 'user') {
+                setUserType('user');
+              }
+              setSession(true);
+              window.location.href = '/';
+            }} />
+          }
         />
         <Route
           path="/*"
@@ -422,12 +462,32 @@ function App() {
                       "currentClientAdmin",
                       JSON.stringify({ email: data.email })
                     );
+                  } else if (type === "user") {
+                    setUserData(data);
+                    localStorage.setItem(
+                      "currentUser",
+                      JSON.stringify({ email: data.email })
+                    );
                   }
                   setSession(true);
                 }}
               />
             ) : userType === "superadmin" ? (
               <SuperAdminDashboard />
+            ) : userType === "user" ? (
+              <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                  <h1 className="text-3xl font-bold text-gray-900 mb-4">Welcome, {userData?.email}!</h1>
+                  <p className="text-gray-600 mb-8">Your account has been activated successfully.</p>
+                  <p className="text-sm text-gray-500">Survey interface coming soon...</p>
+                  <button 
+                    onClick={handleLogout}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
             ) : clientAdminData?.isFirstTime || showProfileEdit ? (
               <ProfileSetup
                 email={clientAdminData.email}

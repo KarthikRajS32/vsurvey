@@ -80,6 +80,8 @@ class AuthService {
   // Sign out
   async signOut() {
     try {
+      // Clear stored token before signing out
+      localStorage.removeItem('firebaseToken');
       await signOut(auth);
       return {
         success: true,

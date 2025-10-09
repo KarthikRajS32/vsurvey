@@ -8,21 +8,54 @@ class ApiService {
   }
 
   async getAuthToken() {
+    // Wait for auth state to be ready
+    await new Promise(resolve => {
+      if (auth.currentUser) {
+        resolve();
+        return;
+      }
+      const unsubscribe = auth.onAuthStateChanged(() => {
+        unsubscribe();
+        resolve();
+      });
+      // Timeout after 3 seconds
+      setTimeout(() => {
+        unsubscribe();
+        resolve();
+      }, 3000);
+    });
+
     const user = auth.currentUser;
     if (user) {
-      return await user.getIdToken();
+      try {
+        const token = await user.getIdToken(true);
+        console.log('DEBUG: User email:', user.email);
+        console.log('DEBUG: Token length:', token.length);
+        localStorage.setItem('firebaseToken', token);
+        return token;
+      } catch (error) {
+        console.error('Error getting token:', error);
+        localStorage.removeItem('firebaseToken');
+        return null;
+      }
     }
-    // Fallback to stored token
-    return localStorage.getItem('firebaseToken');
+    
+    console.log('DEBUG: No current user found');
+    localStorage.removeItem('firebaseToken');
+    return null;
   }
 
   async request(endpoint, options = {}) {
     const token = await this.getAuthToken();
     
+    if (!token) {
+      return { items: [], total: 0, page: 1, size: 10, pages: 0 };
+    }
+    
     const config = {
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
+        'Authorization': `Bearer ${token}`,
         ...options.headers,
       },
       ...options,
@@ -32,14 +65,24 @@ class ApiService {
       config.body = JSON.stringify(config.body);
     }
 
-    const response = await fetch(`${this.baseURL}${endpoint}`, config);
-    
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Network error' }));
-      throw new Error(error.detail || error.message || 'Request failed');
-    }
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, config);
+      
+      if (response.status === 401) {
+        localStorage.removeItem('firebaseToken');
+        return { items: [], total: 0, page: 1, size: 10, pages: 0 };
+      }
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Network error' }));
+        throw new Error(error.detail || error.message || 'Request failed');
+      }
 
-    return await response.json();
+      return await response.json();
+    } catch (error) {
+      // Silently return empty data for any error including network/auth errors
+      return { items: [], total: 0, page: 1, size: 10, pages: 0 };
+    }
   }
 
   // User endpoints

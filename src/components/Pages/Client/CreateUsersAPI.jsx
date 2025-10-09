@@ -490,10 +490,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Edit3, Trash2, Search, Plus, UserCheck, UserX, Mail, UserPlus } from "lucide-react";
+ import { Edit3, Trash2, Search, Plus, UserCheck, UserX, Mail, UserPlus, Users, Building } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import ClientAdminHeader from "./ClientAdminHeader";
 import { useUsers } from "../../../hooks/useApi";
 import authService from "../../../services/authService";
 import { auth } from "../../../firebase";
+import { apiService } from "../../../services/api";
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -604,12 +607,14 @@ const CreateUsersAPI = ({
       await sendPasswordResetEmail(secondaryAuth, formData.email.trim());
       console.log("Password reset email sent successfully");
 
-      // Create user in backend
+      // Create user in backend with pending status
       await createUser({
         full_name: formData.full_name.trim(),
         email: formData.email.trim(),
         created_by: profile?.email || "admin@example.com",
         firebaseUid: userCredential.user.uid,
+        is_active: false,
+        status: 'pending'
       });
 
       setFormData({ full_name: "", email: "" });
@@ -632,9 +637,12 @@ const CreateUsersAPI = ({
 
   const handleToggleStatus = async (userId) => {
     try {
+      // Use the toggleUserStatus API endpoint
       await toggleUserStatus(userId);
+      
       setMessage("User status updated successfully!");
       setTimeout(() => setMessage(""), 3000);
+      
     } catch (err) {
       setMessage(err.message || "Failed to update user status");
       setTimeout(() => setMessage(""), 5000);
@@ -761,31 +769,25 @@ const CreateUsersAPI = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            Survey Users
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Manage users who can participate in surveys
-          </p>
-        </div>
-        {/* <Button
-          onClick={onNavigateToSurveys}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Create Survey
-        </Button> */}
+      <ClientAdminHeader
+        profile={profile}
+        onProfileEdit={onProfileEdit}
+        onLogout={onLogout}
+      />
+
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          User Management
+        </h1>
+        <p className="text-gray-600">Create and manage survey participants</p>
       </div>
 
-      {/* Display messages */}
       {(message || error) && (
         <div
-          className={`p-4 rounded-lg ${
-            error
-              ? "bg-red-50 text-red-700 border border-red-200"
-              : "bg-green-50 text-green-700 border border-green-200"
+          className={`mb-6 p-4 rounded-md ${
+            (message && (message.includes("success") || message.includes("✅")))
+              ? "bg-green-50 text-green-700"
+              : "bg-red-50 text-red-700"
           }`}
         >
           <div className="flex justify-between items-center">
@@ -809,10 +811,9 @@ const CreateUsersAPI = ({
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Full Name *
-                </label>
+                <Label htmlFor="full_name">Full Name *</Label>
                 <Input
+                  id="full_name"
                   type="text"
                   value={formData.full_name}
                   onChange={(e) =>
@@ -824,10 +825,9 @@ const CreateUsersAPI = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address *
-                </label>
+                <Label htmlFor="email">Email Address *</Label>
                 <Input
+                  id="email"
                   type="email"
                   value={formData.email}
                   onChange={(e) =>
@@ -843,8 +843,8 @@ const CreateUsersAPI = ({
 
               <Button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
                 disabled={loading}
+                className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
               >
                 {loading ? "Creating..." : "Create User"}
               </Button>
@@ -855,167 +855,158 @@ const CreateUsersAPI = ({
         {/* Users List */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <CardTitle>Users ({pagination.total})</CardTitle>
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  type="text"
-                  placeholder="Search users..."
-                  value={searchTerm}
-                  onChange={handleSearchChange}
-                  className="pl-10"
-                />
-              </div>
-            </div>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Survey Users ({pagination.total})
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {loading && users.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-gray-500 mt-2">Loading users...</p>
-              </div>
-            ) : users.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No users found</p>
-                {searchTerm && (
-                  <p className="text-sm text-gray-400 mt-1">
-                    Try adjusting your search terms
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-4">
-                {users.map((user) => (
-                  <div
-                    key={user.id}
-                    className="relative bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                  >
-                    {/* Status indicator */}
-                    <div
-                      className={`absolute top-3 right-3 w-3 h-3 rounded-full ${user.is_active ? "bg-green-500" : "bg-red-500"}`}
-                    ></div>
+            {loading && <p>Loading users...</p>}
 
-                    {/* User info */}
-                    <div className="pr-6 mb-3">
-                      <h3 className="font-semibold text-gray-900 text-lg mb-1 truncate">
-                        {user.full_name}
-                      </h3>
-                      <p className="text-sm text-gray-600 truncate">
-                        {user.email}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Status:{" "}
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {users.map((user) => (
+                <div key={user.id} className="border rounded-lg p-4 bg-white">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Building className="w-4 h-4 text-gray-500" />
+                        <h3 className="font-semibold">{user.full_name}</h3>
                         <span
-                          className={`font-medium ${user.is_active ? "text-green-600" : "text-red-600"}`}
+                          className={`px-2 py-1 text-xs rounded-full ${
+                            user.status === 'active' ? "bg-green-100 text-green-800" : 
+                            user.status === 'inactive' ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"
+                          }`}
                         >
-                          {user.is_active ? "Active" : "Inactive"}
+                          {user.status === 'active' ? "Active" : user.status === 'inactive' ? "Inactive" : "Pending"}
                         </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-1">
+                        Email: {user.email}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Created:{" "}
+                        {user.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A"}
                       </p>
                     </div>
 
-                    {/* Action buttons */}
-                    <div className="space-y-2 pt-2 border-t border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggleStatus(user.id)}
-                          className={`text-xs px-2 py-1 h-7 ${user.is_active ? "text-red-600 hover:text-red-700 hover:bg-red-50" : "text-green-600 hover:text-green-700 hover:bg-green-50"}`}
-                          disabled={loading}
-                        >
-                          {user.is_active ? (
-                            <>
-                              <UserX className="w-3 h-3 mr-1" />
-                              Deactivate
-                            </>
-                          ) : (
-                            <>
-                              <UserCheck className="w-3 h-3 mr-1" />
-                              Activate
-                            </>
-                          )}
-                        </Button>
-
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditModal(user)}
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-1 h-7 w-7"
-                            title="Edit user"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openDeleteModal(user)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 h-7 w-7"
-                            title="Delete user"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </div>
-                      
-                      {/* Firebase actions */}
-                      <div className="flex items-center gap-1">
-                        {/* <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => createFirebaseUser(user.email)}
-                          className="text-xs px-2 py-1 h-7 text-purple-600 hover:text-purple-700 hover:bg-purple-50 flex-1"
-                          title="Create Firebase user & send password email"
-                        >
-                          <UserPlus className="w-3 h-3 mr-1" />
-                          Create Auth
-                        </Button> */}
-                        
-                        {/* <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => resendPasswordEmail(user.email)}
-                          className="text-xs px-2 py-1 h-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 flex-1"
-                          title="Resend password setup email"
-                        >
-                          <Mail className="w-3 h-3 mr-1" />
-                          Send Email
-                        </Button> */}
-                      </div>
+                    <div className="flex gap-2 ml-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => createFirebaseUser(user.email)}
+                        title="Create Firebase user & send password email"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => resendPasswordEmail(user.email)}
+                        title="Resend password setup email"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleToggleStatus(user.id)}
+                        title={user.status === 'active' ? 'Deactivate User' : 'Activate User'}
+                      >
+                        {user.status === 'active' ? (
+                          <UserX className="w-4 h-4" />
+                        ) : (
+                          <UserCheck className="w-4 h-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditModal(user)}
+                        title="Edit user"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openDeleteModal(user)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
-                ))}
+                </div>
+              ))}
+
+              {users.length === 0 && !loading && (
+                <p className="text-gray-500 text-center py-8">No users found</p>
+              )}
+            </div>
+
+
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-8">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Total Users</p>
+                <p className="text-2xl font-bold">{users.length}</p>
               </div>
-            )}
+              <Users className="w-8 h-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
 
-            {/* Pagination */}
-            {pagination.pages > 1 && (
-              <div className="flex justify-center items-center gap-2 mt-6">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1 || loading}
-                >
-                  Previous
-                </Button>
-
-                <span className="text-sm text-gray-600">
-                  Page {currentPage} of {pagination.pages}
-                </span>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === pagination.pages || loading}
-                >
-                  Next
-                </Button>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Active Users
+                </p>
+                <p className="text-2xl font-bold">
+                  {users.filter((u) => u.status === 'active').length}
+                </p>
               </div>
-            )}
+              <UserCheck className="w-8 h-8 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Pending Users
+                </p>
+                <p className="text-2xl font-bold">
+                  {users.filter((u) => u.status === 'pending' || (!u.status && !u.is_active)).length}
+                </p>
+              </div>
+              <Mail className="w-8 h-8 text-yellow-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Inactive Users
+                </p>
+                <p className="text-2xl font-bold">
+                  {users.filter((u) => u.status === 'inactive').length}
+                </p>
+              </div>
+              <UserX className="w-8 h-8 text-red-500" />
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1028,10 +1019,9 @@ const CreateUsersAPI = ({
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name *
-              </label>
+              <Label htmlFor="edit_full_name">Full Name *</Label>
               <Input
+                id="edit_full_name"
                 type="text"
                 value={editFormData.full_name}
                 onChange={(e) =>
@@ -1046,18 +1036,17 @@ const CreateUsersAPI = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address *
-              </label>
+              <Label htmlFor="edit_email">Email Address</Label>
               <Input
+                id="edit_email"
                 type="email"
                 value={editFormData.email}
-                onChange={(e) =>
-                  setEditFormData({ ...editFormData, email: e.target.value })
-                }
-                placeholder="Enter email address"
-                required
+                disabled
+                className="bg-gray-100 cursor-not-allowed"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Email cannot be changed
+              </p>
             </div>
 
             <div className="flex gap-2 pt-4">
@@ -1099,7 +1088,7 @@ const CreateUsersAPI = ({
             <div className="flex gap-2 pt-4">
               <Button
                 onClick={confirmDelete}
-                className="flex-1 bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
+                className="flex-1 bg-red-600 hover:bg-red-700"
                 disabled={loading}
               >
                 {loading ? "Deleting..." : "Delete User"}

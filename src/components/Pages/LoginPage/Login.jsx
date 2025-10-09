@@ -4,6 +4,9 @@ import { Input } from '../../ui/input'
 import { Card, CardContent } from '../../ui/card'
 import loginImage from '../../../assets/1.png'
 import authService from '../../../services/authService'
+import { activateClientAdmin, isClientAdminPending, clientAdminExists } from '../../../services/clientStatusService'
+import { activateUser, isUserPending, userExists } from '../../../services/userStatusService'
+import { notifyClientStatusChange } from '../../../services/superAdminNotification'
 
 const Login = ({ onLogin }) => {
   const [email, setEmail] = useState('')
@@ -25,18 +28,95 @@ const Login = ({ onLogin }) => {
       const result = await authService.signIn(email, password)
       
       if (result.success) {
-        // Store token for API calls
-        const token = await result.user.getIdToken()
+        // Store fresh token for API calls
+        const token = await result.user.getIdToken(true)
         localStorage.setItem('firebaseToken', token)
+        
+        // Skip activation if this is during user creation process
+        if (window.isCreatingUser) {
+          console.log('User creation in progress, skipping activation')
+          return
+        }
+        
+        // Check if client admin exists in our database
+        console.log('DEBUG: Checking if client admin exists:', email)
+        const clientExists = await clientAdminExists(email)
+        console.log('DEBUG: Client admin exists:', clientExists)
+        
+        if (clientExists) {
+          // Check if client admin is pending and activate them
+          console.log('DEBUG: Checking if client admin is pending:', email)
+          const isPending = await isClientAdminPending(email)
+          console.log('DEBUG: Client admin is pending:', isPending)
+          
+          if (isPending) {
+            console.log('DEBUG: Attempting to activate client admin:', email)
+            const activated = await activateClientAdmin(email)
+            console.log('DEBUG: Client admin activation result:', activated)
+            
+            if (activated) {
+              console.log('✅ Client admin activated successfully:', email)
+              // Status will be updated via Firestore real-time listener
+              // Get fresh token after activation
+              const freshToken = await result.user.getIdToken(true)
+              localStorage.setItem('firebaseToken', freshToken)
+            } else {
+              console.log('❌ Failed to activate client admin:', email)
+            }
+          } else {
+            console.log('DEBUG: Client admin is not pending, current status unknown')
+          }
+        } else {
+          // Check if regular user exists in our database
+          console.log('DEBUG: Checking if regular user exists:', email)
+          const regularUserExists = await userExists(email)
+          console.log('DEBUG: Regular user exists:', regularUserExists)
+          
+          if (regularUserExists) {
+            // Check if user is pending and activate them
+            console.log('DEBUG: Checking if user is pending:', email)
+            const isUserPendingStatus = await isUserPending(email)
+            console.log('DEBUG: User is pending:', isUserPendingStatus)
+            
+            if (isUserPendingStatus) {
+              console.log('DEBUG: Attempting to activate user:', email)
+              const userActivated = await activateUser(email)
+              console.log('DEBUG: User activation result:', userActivated)
+              
+              if (userActivated) {
+                console.log('✅ User activated successfully:', email)
+                // Get fresh token after activation
+                const freshToken = await result.user.getIdToken(true)
+                localStorage.setItem('firebaseToken', freshToken)
+              } else {
+                console.log('❌ Failed to activate user:', email)
+              }
+            } else {
+              console.log('DEBUG: User is not pending, current status unknown')
+            }
+          } else {
+            console.log('❌ User not found in database:', email)
+          }
+        }
         
         // Wait a moment for Firebase auth state to update
         setTimeout(() => {
-          onLogin('client', { 
-            email, 
-            isFirstTime: false, 
-            profile: null 
-          })
-        }, 1000)
+          // Determine user type based on database presence
+          if (clientExists) {
+            onLogin('client', { 
+              email, 
+              isFirstTime: false, 
+              profile: null 
+            })
+          } else {
+            // Regular user login - redirect to user dashboard or survey interface
+            onLogin('user', { 
+              email, 
+              isFirstTime: false, 
+              profile: null 
+            })
+          }
+        }, 1500)
       }
     } catch (error) {
       alert('Invalid email or password: ' + error.message)

@@ -410,8 +410,8 @@ const Surveys = ({ profile, onProfileEdit, onLogout, onNavigateToSurveys }) => {
 
   const loadFirebaseQuestions = async () => {
     try {
-      const clientEmail = profile?.email || "admin@example.com";
-      const questionsRef = collection(db, "client_questions", clientEmail, "questions");
+      const clientId = profile?.clientId || profile?.id || "8v3Mmi2BJ60ehQ9Dhqo3";
+      const questionsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions");
       const snapshot = await getDocs(questionsRef);
       const fbQuestions = [];
       snapshot.forEach((doc) => {

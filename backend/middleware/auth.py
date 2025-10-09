@@ -9,8 +9,11 @@ security = HTTPBearer()
 async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Verify Firebase ID token and return user info"""
     try:
-        # Verify the ID token
-        decoded_token = auth.verify_id_token(credentials.credentials)
+        print(f"DEBUG: Verifying token for request")
+        print(f"DEBUG: Token length: {len(credentials.credentials)}")
+        
+        # Verify the ID token with clock skew tolerance
+        decoded_token = auth.verify_id_token(credentials.credentials, clock_skew_seconds=60)
         
         # Extract user information
         user_info = {
@@ -20,23 +23,28 @@ async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depe
             "name": decoded_token.get("name"),
         }
         
+        print(f"DEBUG: Token verified for user: {user_info['email']}")
         return user_info
         
-    except auth.InvalidIdTokenError:
-        logger.error("Invalid Firebase ID token")
+    except auth.InvalidIdTokenError as e:
+        print(f"DEBUG: Invalid Firebase ID token: {str(e)}")
+        logger.error(f"Invalid Firebase ID token: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except auth.ExpiredIdTokenError:
-        logger.error("Expired Firebase ID token")
+    except auth.ExpiredIdTokenError as e:
+        print(f"DEBUG: Expired Firebase ID token: {str(e)}")
+        logger.error(f"Expired Firebase ID token: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication token has expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception as e:
+        print(f"DEBUG: Token verification error: {str(e)}")
+        print(f"DEBUG: Error type: {type(e)}")
         logger.error(f"Token verification error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

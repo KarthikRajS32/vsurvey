@@ -27,10 +27,12 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, min_length=1, max_length=100)
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
+    status: Optional[str] = None
 
 class User(UserBase):
     id: str
-    is_active: bool = True
+    is_active: bool = False
+    status: str = "pending"
     created_at: datetime
     updated_at: datetime
     created_by: str  # Client admin email

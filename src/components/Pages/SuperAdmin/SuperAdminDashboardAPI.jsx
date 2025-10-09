@@ -482,6 +482,7 @@ import {
   deleteDoc,
   doc,
   updateDoc,
+  onSnapshot,
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword,
@@ -490,6 +491,7 @@ import {
 } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { setSuperAdminUpdateCallback } from "../../../services/superAdminNotification";
 
 // Create separate Firebase app for user creation (doesn't affect main auth state)
 const secondaryApp = initializeApp(
@@ -521,9 +523,40 @@ const SuperAdminDashboardAPI = () => {
   });
   const [message, setMessage] = useState("");
 
-  // Load clients from Firebase
+  // Load clients from Firebase with real-time listener for status changes only
   useEffect(() => {
-    loadClients();
+    const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+    const clientsRef = collection(db, "superadmin", superadminId, "clients");
+    
+    // Set up real-time listener only for status field changes
+    const unsubscribe = onSnapshot(clientsRef, (snapshot) => {
+      const clients = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        clients.push({
+          id: doc.id,
+          name: data.name || `Client ${doc.id.substring(0, 8)}`,
+          email: data.email || "No email provided",
+          clientId: data.clientId || doc.id,
+          createdAt: data.createdAt || new Date().toISOString(),
+          status: data.status || "pending",
+          isActive: data.isActive !== undefined ? data.isActive : false,
+          ...data,
+        });
+      });
+      
+      // Only update if there are actual changes
+      setClientAdmins(prevClients => {
+        const hasChanges = JSON.stringify(prevClients) !== JSON.stringify(clients);
+        if (hasChanges) {
+          console.log("Client status updated:", clients.filter(c => c.status === "active").map(c => c.email));
+          return clients;
+        }
+        return prevClients;
+      });
+    });
+    
+    return () => unsubscribe();
   }, []);
 
   const loadClients = async () => {
@@ -543,13 +576,20 @@ const SuperAdminDashboardAPI = () => {
           email: data.email || "No email provided",
           clientId: data.clientId || doc.id,
           createdAt: data.createdAt || new Date().toISOString(),
-          isActive: data.isActive !== undefined ? data.isActive : true,
+          status: data.status || "pending",
+          isActive: data.isActive !== undefined ? data.isActive : false,
           ...data,
         });
       });
 
       console.log("Loaded clients:", clients); // Debug log
       setClientAdmins(clients);
+      
+      // Check if any client status changed from pending to active
+      const activeClients = clients.filter(c => c.status === "active");
+      if (activeClients.length > 0) {
+        console.log("Active clients detected:", activeClients.map(c => c.email));
+      }
     } catch (error) {
       console.error("Error loading clients:", error);
       setMessage("Failed to load clients");
@@ -599,7 +639,8 @@ const SuperAdminDashboardAPI = () => {
         email: formData.email.trim(),
         clientId: formData.clientId.trim() || `client_${Date.now()}`,
         createdAt: new Date().toISOString(),
-        isActive: true,
+        status: "pending",
+        isActive: false,
         firebaseUid: userCredential.user.uid,
       };
 
@@ -853,12 +894,14 @@ const SuperAdminDashboardAPI = () => {
                               <h3 className="font-semibold">{admin.name}</h3>
                               <span
                                 className={`px-2 py-1 text-xs rounded-full ${
-                                  admin.isActive
+                                  admin.status === "active"
                                     ? "bg-green-100 text-green-800"
+                                    : admin.status === "pending"
+                                    ? "bg-yellow-100 text-yellow-800"
                                     : "bg-red-100 text-red-800"
                                 }`}
                               >
-                                {admin.isActive ? "Active" : "Inactive"}
+                                {admin.status === "active" ? "Active" : admin.status === "pending" ? "Pending" : "Inactive"}
                               </span>
                             </div>
                             <p className="text-sm text-gray-600 mb-1">
@@ -926,7 +969,7 @@ const SuperAdminDashboardAPI = () => {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-8">
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -951,7 +994,7 @@ const SuperAdminDashboardAPI = () => {
                         Active Clients
                       </p>
                       <p className="text-2xl font-bold">
-                        {clientAdmins.filter((c) => c.isActive).length}
+                        {clientAdmins.filter((c) => c.status === "active").length}
                       </p>
                     </div>
                     <UserCheck className="w-8 h-8 text-green-500" />
@@ -964,10 +1007,26 @@ const SuperAdminDashboardAPI = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">
+                        Pending Clients
+                      </p>
+                      <p className="text-2xl font-bold">
+                        {clientAdmins.filter((c) => c.status === "pending").length}
+                      </p>
+                    </div>
+                    <Mail className="w-8 h-8 text-yellow-500" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
                         Inactive Clients
                       </p>
                       <p className="text-2xl font-bold">
-                        {clientAdmins.filter((c) => !c.isActive).length}
+                        {clientAdmins.filter((c) => c.status === "inactive").length}
                       </p>
                     </div>
                     <UserX className="w-8 h-8 text-red-500" />
