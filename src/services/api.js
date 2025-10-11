@@ -8,6 +8,12 @@ class ApiService {
   }
 
   async getAuthToken() {
+    // Skip during user creation to avoid auth conflicts
+    if (window.isCreatingUser) {
+      console.log('DEBUG: Skipping getAuthToken during user creation');
+      return null;
+    }
+
     // Wait for auth state to be ready
     await new Promise(resolve => {
       if (auth.currentUser) {
@@ -29,23 +35,25 @@ class ApiService {
     if (user) {
       try {
         const token = await user.getIdToken(true);
-        console.log('DEBUG: User email:', user.email);
-        console.log('DEBUG: Token length:', token.length);
         localStorage.setItem('firebaseToken', token);
         return token;
       } catch (error) {
-        console.error('Error getting token:', error);
         localStorage.removeItem('firebaseToken');
         return null;
       }
     }
     
-    console.log('DEBUG: No current user found');
     localStorage.removeItem('firebaseToken');
     return null;
   }
 
   async request(endpoint, options = {}) {
+    // Skip all API requests during user creation
+    if (window.isCreatingUser) {
+      console.log('DEBUG: Skipping API request during user creation');
+      return { items: [], total: 0, page: 1, size: 10, pages: 0 };
+    }
+    
     const token = await this.getAuthToken();
     
     if (!token) {

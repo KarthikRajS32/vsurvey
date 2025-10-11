@@ -368,7 +368,7 @@ import { Label } from "@/components/ui/label";
 import { Edit3, X, Trash2 } from "lucide-react";
 import { useQuestions } from "../../../hooks/useApi";
 import authService from "../../../services/authService";
-import { db } from "../../../firebase";
+import { db, auth } from "../../../firebase";
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
 
 const CreateQuestionAPI = ({
@@ -402,7 +402,12 @@ const CreateQuestionAPI = ({
     text: "",
     type: "",
     options: [],
+    ratingScale: "1-5",
   });
+
+  // Delete modal states
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [questionToDelete, setQuestionToDelete] = useState(null);
 
   // Load questions on component mount
   useEffect(() => {
@@ -432,9 +437,38 @@ const CreateQuestionAPI = ({
     }
   };
 
+  const getClientId = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return null;
+      
+      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+      const snapshot = await getDocs(clientsRef);
+      
+      let clientDocId = null;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.email === currentUser.email) {
+          clientDocId = doc.id;
+        }
+      });
+      
+      return clientDocId;
+    } catch (error) {
+      console.error("Error getting client ID:", error);
+      return null;
+    }
+  };
+
   const loadFirebaseQuestions = async () => {
     try {
-      const clientId = profile?.clientId || profile?.id || "8v3Mmi2BJ60ehQ9Dhqo3";
+      const clientId = await getClientId();
+      if (!clientId) {
+        console.error('No client ID found for current user');
+        return;
+      }
+      
+      console.log('Loading questions for clientId:', clientId);
       const questionsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions");
       const snapshot = await getDocs(questionsRef);
       const fbQuestions = [];
@@ -494,8 +528,17 @@ const CreateQuestionAPI = ({
         createdAt: new Date().toISOString(),
       };
 
+      if (responseType === "rating") {
+        questionData.ratingScale = ratingScale;
+      }
+
       // Save to Firebase in client-specific collection
-      const clientId = profile?.clientId || profile?.id || "8v3Mmi2BJ60ehQ9Dhqo3";
+      const clientId = await getClientId();
+      if (!clientId) {
+        throw new Error('No client ID found for current user');
+      }
+      
+      console.log('Saving question for clientId:', clientId);
       const questionsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions");
       await addDoc(questionsRef, questionData);
       console.log("Question saved to Firebase successfully for client:", clientId);
@@ -526,6 +569,7 @@ const CreateQuestionAPI = ({
       text: question.text,
       type: question.type,
       options: question.options || [],
+      ratingScale: question.ratingScale || '1-5',
     });
     setIsEditModalOpen(true);
   };
@@ -535,20 +579,33 @@ const CreateQuestionAPI = ({
 
     try {
       // Update in Firebase
-      const clientId = profile?.clientId || profile?.id || "8v3Mmi2BJ60ehQ9Dhqo3";
+      const clientId = await getClientId();
+      if (!clientId) {
+        throw new Error('No client ID found for current user');
+      }
+      
       const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", editingQuestion.id);
-      await updateDoc(questionRef, {
+      const updateData = {
         text: editFormData.text,
         type: editFormData.type,
         options: editFormData.type === "multiple_choice" 
-          ? editFormData.options.filter(opt => opt.trim()).map((opt, index) => ({
+          ? (editFormData.options || []).filter(opt => {
+              const text = typeof opt === 'string' ? opt : (opt?.text || '');
+              return text && text.trim();
+            }).map((opt, index) => ({
               id: `opt_${Date.now()}_${index}`,
-              text: typeof opt === 'string' ? opt.trim() : opt.text?.trim() || '',
+              text: typeof opt === 'string' ? opt.trim() : (opt?.text?.trim() || ''),
               order: index,
             }))
           : [],
         updatedAt: new Date().toISOString(),
-      });
+      };
+
+      if (editFormData.type === "rating") {
+        updateData.ratingScale = editFormData.ratingScale || '1-5';
+      }
+
+      await updateDoc(questionRef, updateData);
 
       // Also update backend API
       await updateQuestion(editingQuestion.id, editFormData);
@@ -566,17 +623,43 @@ const CreateQuestionAPI = ({
     }
   };
 
-  const handleDelete = async (questionId) => {
-    if (window.confirm("Are you sure you want to delete this question?")) {
+  const openDeleteModal = (question) => {
+    setQuestionToDelete(question);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (questionToDelete) {
       try {
-        await deleteQuestion(questionId);
+        // Delete from Firebase
+        const clientId = await getClientId();
+        if (!clientId) {
+          throw new Error('No client ID found for current user');
+        }
+        
+        const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", questionToDelete.id);
+        await deleteDoc(questionRef);
+        
+        // Also delete from backend API
+        await deleteQuestion(questionToDelete.id);
+        
         setMessage("Question deleted successfully!");
         setTimeout(() => setMessage(""), 3000);
+        
+        // Refresh Firebase questions list
+        await loadFirebaseQuestions();
       } catch (err) {
         setMessage(err.message || "Failed to delete question");
         setTimeout(() => setMessage(""), 5000);
       }
     }
+    setIsDeleteModalOpen(false);
+    setQuestionToDelete(null);
+  };
+
+  const cancelDelete = () => {
+    setIsDeleteModalOpen(false);
+    setQuestionToDelete(null);
   };
 
   return (
@@ -671,6 +754,60 @@ const CreateQuestionAPI = ({
                   >
                     Add Option
                   </Button>
+                  
+                  {/* Preview */}
+                  <div className="mt-4 p-3 bg-gray-50 rounded border">
+                    <Label className="text-sm font-medium">Preview:</Label>
+                    <div className="mt-2 space-y-2">
+                      {options.filter(opt => opt.trim()).map((option, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input type="checkbox" className="w-4 h-4" disabled />
+                          <span className="text-sm">{option}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {responseType === "rating" && (
+                <div>
+                  <Label>Rating Scale</Label>
+                  <select
+                    className="w-full p-3 border text-sm rounded-[5px] border-gray-400 focus:outline-none focus:ring-1 focus:ring-black mt-2"
+                    value={ratingScale}
+                    onChange={(e) => setRatingScale(e.target.value)}
+                  >
+                    <option value="1-3">1-3 Scale</option>
+                    <option value="1-5">1-5 Scale</option>
+                    <option value="1-10">1-10 Scale</option>
+                  </select>
+                  
+                  {/* Preview */}
+                  <div className="mt-4 p-3 bg-gray-50 rounded border">
+                    <Label className="text-sm font-medium">Preview:</Label>
+                    <div className="mt-2 flex gap-1">
+                      {Array.from({ length: parseInt(ratingScale.split('-')[1]) }, (_, i) => (
+                        <span key={i} className="text-yellow-400 text-xl">★</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {responseType === "yes_no" && (
+                <div className="mt-4 p-3 bg-gray-50 rounded border">
+                  <Label className="text-sm font-medium">Preview:</Label>
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input type="radio" name="preview" className="w-4 h-4" disabled />
+                      <span className="text-sm">Yes</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="radio" name="preview" className="w-4 h-4" disabled />
+                      <span className="text-sm">No</span>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -682,13 +819,13 @@ const CreateQuestionAPI = ({
 
           {/* Questions List */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Existing Questions</h2>
+            <h2 className="text-xl font-semibold mb-4">Available Questions ({firebaseQuestions.length})</h2>
 
             {loading && <p>Loading questions...</p>}
             {error && <p className="text-red-600">Error: {error}</p>}
 
             <div className="space-y-4 max-h-96 overflow-y-auto">
-              {firebaseQuestions.map((question) => (
+              {firebaseQuestions.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).map((question) => (
                 <div key={question.id} className="border rounded-lg p-4">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -718,7 +855,7 @@ const CreateQuestionAPI = ({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(question.id)}
+                        onClick={() => openDeleteModal(question)}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -808,6 +945,63 @@ const CreateQuestionAPI = ({
                 >
                   Add Option
                 </Button>
+                
+                {/* Preview */}
+                <div className="mt-4 p-3 bg-gray-50 rounded border">
+                  <Label className="text-sm font-medium">Preview:</Label>
+                  <div className="mt-2 space-y-2">
+                    {(editFormData.options || []).filter(opt => {
+                      const text = typeof opt === 'string' ? opt : opt.text || '';
+                      return text.trim();
+                    }).map((option, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <input type="checkbox" className="w-4 h-4" disabled />
+                        <span className="text-sm">{typeof option === 'string' ? option : option.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {editFormData.type === "rating" && (
+              <div>
+                <Label>Rating Scale</Label>
+                <select
+                  className="w-full p-3 border text-sm rounded-[5px] border-gray-400 focus:outline-none focus:ring-1 focus:ring-black mt-2"
+                  value={editFormData.ratingScale || '1-5'}
+                  onChange={(e) => setEditFormData({ ...editFormData, ratingScale: e.target.value })}
+                >
+                  <option value="1-3">1-3 Scale</option>
+                  <option value="1-5">1-5 Scale</option>
+                  <option value="1-10">1-10 Scale</option>
+                </select>
+                
+                {/* Preview */}
+                <div className="mt-4 p-3 bg-gray-50 rounded border">
+                  <Label className="text-sm font-medium">Preview:</Label>
+                  <div className="mt-2 flex gap-1">
+                    {Array.from({ length: parseInt((editFormData.ratingScale || '1-5').split('-')[1]) }, (_, i) => (
+                      <span key={i} className="text-yellow-400 text-xl">★</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {editFormData.type === "yes_no" && (
+              <div className="mt-4 p-3 bg-gray-50 rounded border">
+                <Label className="text-sm font-medium">Preview:</Label>
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input type="radio" name="editPreview" className="w-4 h-4" disabled />
+                    <span className="text-sm">Yes</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="radio" name="editPreview" className="w-4 h-4" disabled />
+                    <span className="text-sm">No</span>
+                  </div>
+                </div>
               </div>
             )}
             
@@ -824,6 +1018,35 @@ const CreateQuestionAPI = ({
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>Are you sure you want to delete <strong>{questionToDelete?.text}</strong>?</p>
+            <p className="text-sm text-gray-600">This action cannot be undone.</p>
+            
+            <div className="flex gap-2 pt-4">
+              <Button 
+                onClick={confirmDelete}
+                className="flex-1 bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
+              >
+                Delete Question
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={cancelDelete}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

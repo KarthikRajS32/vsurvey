@@ -166,7 +166,7 @@ import Sidebar from "./components/Pages/SideBar/Sidebar";
 import TopBar from "./components/Pages/TapBar/TopBar";
 import SurveyPersonnel from "./components/Pages/Client/CreateUsersAPI";
 import Surveys from "./components/Pages/Client/CreateQuestionAPI";
-import CreateSurvey from "./components/Pages/Client/CreateSurveys";
+import CreateSurvey from "./components/Pages/Client/CreateSurveysAPI";
 import Login from "./components/Pages/LoginPage/Login";
 import { supabase } from "./lib/supabaseClient";
 import AssignUser from "./components/Pages/Client/AssignUser";
@@ -376,7 +376,6 @@ function App() {
             profile={clientAdminData?.profile}
             onProfileEdit={handleProfileEdit}
             onLogout={handleLogout}
-            onNavigateToSurveys={handleNavigateToSurveys}
           />
         );
       case "assignuser":
