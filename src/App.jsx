@@ -174,6 +174,7 @@ import SuperAdminDashboard from "./components/Pages/SuperAdmin/SuperAdminDashboa
 import ProfileSetup from "./components/Pages/Client/ProfileSetup";
 import ClientAdminHeader from "./components/Pages/Client/ClientAdminHeader";
 import SetPassword from "./components/Pages/EmailPasswordSet/SetPassword";
+import SurveyResults from "./components/Pages/Client/clientSurveyResult";
 import { auth } from "./firebase";
 
 function App() {
@@ -385,6 +386,14 @@ function App() {
             onProfileEdit={handleProfileEdit}
             onLogout={handleLogout}
             onNavigateToSurveys={handleNavigateToSurveys}
+          />
+        );
+      case "results":
+        return (
+          <SurveyResults
+            profile={clientAdminData?.profile}
+            onProfileEdit={handleProfileEdit}
+            onLogout={handleLogout}
           />
         );
       default:

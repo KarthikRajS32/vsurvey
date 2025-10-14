@@ -640,7 +640,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Edit3, Trash2 } from "lucide-react";
 import { db, auth } from "../../../firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where, addDoc } from "firebase/firestore";
 
 const AssignUser = ({
   profile,
@@ -683,48 +683,29 @@ const AssignUser = ({
     };
   }, [profile]);
 
-  const getClientId = async () => {
-    try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return null;
-      
-      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
-      const snapshot = await getDocs(clientsRef);
-      
-      let clientDocId = null;
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.email === currentUser.email) {
-          clientDocId = doc.id;
-        }
-      });
-      
-      return clientDocId;
-    } catch (error) {
-      console.error("Error getting client ID:", error);
-      return null;
-    }
-  };
+
 
   const loadUsers = async () => {
     try {
-      const clientId = await getClientId();
-      if (!clientId) {
-        console.error('No client ID found for current user');
+      const currentUser = auth.currentUser;
+      if (!currentUser?.email) {
+        console.error('No authenticated user found');
         return;
       }
       
-      console.log('Loading users for clientId:', clientId);
-      const usersRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "users");
+      console.log('Loading users created by:', currentUser.email);
+      const usersRef = collection(db, "users");
       const snapshot = await getDocs(usersRef);
       const usersList = [];
       snapshot.forEach((doc) => {
         const userData = doc.data();
-        console.log('Found user:', userData);
-        usersList.push({
-          id: doc.id,
-          name: userData.full_name || userData.fullName || userData.name || userData.email
-        });
+        if (userData.created_by === currentUser.email) {
+          console.log('Found user:', userData);
+          usersList.push({
+            id: doc.id,
+            name: userData.full_name || userData.fullName || userData.name || userData.email
+          });
+        }
       });
       console.log('Loaded users:', usersList);
       setUsers(usersList);
@@ -735,7 +716,24 @@ const AssignUser = ({
 
   const loadSurveys = async () => {
     try {
-      const clientId = await getClientId();
+      const currentUser = auth.currentUser;
+      if (!currentUser?.email) {
+        console.error('No authenticated user found');
+        return;
+      }
+      
+      // For now, using the nested path for surveys - this may need updating based on your survey storage structure
+      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+      const clientsSnapshot = await getDocs(clientsRef);
+      
+      let clientId = null;
+      clientsSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.email === currentUser.email) {
+          clientId = doc.id;
+        }
+      });
+      
       if (!clientId) {
         console.error('No client ID found for current user');
         return;
@@ -805,41 +803,88 @@ const AssignUser = ({
     setSelectedSurveys(selectedSurveys.filter((id) => id !== surveyId));
   };
 
-  const assignSurveys = () => {
+  const assignSurveys = async () => {
     if (selectedUser.length > 0 && selectedSurveys.length > 0) {
-      const newAssignments = selectedSurveys.map((surveyId) => ({
-        ...surveys.find((s) => s.id === surveyId),
-        active: true,
-      }));
+      try {
+        const currentUser = auth.currentUser;
+        if (!currentUser?.email) {
+          console.error('No authenticated user found');
+          return;
+        }
 
-      const updatedAssignments = { ...userAssignments };
+        // Get client ID
+        const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+        const clientsSnapshot = await getDocs(clientsRef);
+        
+        let clientId = null;
+        clientsSnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.email === currentUser.email) {
+            clientId = doc.id;
+          }
+        });
+        
+        if (!clientId) {
+          console.error('No client ID found for current user');
+          return;
+        }
 
-      selectedUser.forEach((userId) => {
-        updatedAssignments[userId] = [
-          ...(updatedAssignments[userId] || []),
-          ...newAssignments.filter(
-            (survey) =>
-              !(updatedAssignments[userId] || []).some(
-                (existing) => existing.id === survey.id
-              )
-          ),
-        ];
-      });
+        // Create assignments in Firebase
+        const assignmentsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments");
+        
+        for (const userId of selectedUser) {
+          for (const surveyId of selectedSurveys) {
+            const assignmentData = {
+              created_at: new Date().toISOString(),
+              is_active: true,
+              survey_id: surveyId,
+              updated_at: new Date().toISOString(),
+              user_id: userId
+            };
+            
+            await addDoc(assignmentsRef, assignmentData);
+          }
+        }
 
-      setUserAssignments(updatedAssignments);
+        // Update local state for UI
+        const newAssignments = selectedSurveys.map((surveyId) => ({
+          ...surveys.find((s) => s.id === surveyId),
+          active: true,
+        }));
 
-      const userNames = selectedUser
-        .map((id) => users.find((u) => u.id === id)?.name)
-        .join(", ");
-      setConfirmationMessage(
-        `Successfully assigned ${selectedSurveys.length} survey${selectedSurveys.length > 1 ? "s" : ""} to ${userNames}`
-      );
-      setTimeout(() => setConfirmationMessage(""), 3000);
+        const updatedAssignments = { ...userAssignments };
 
-      setSelectedUser([]);
-      setSelectedSurveys([]);
-      setUserSearch("");
-      setSurveySearch("");
+        selectedUser.forEach((userId) => {
+          updatedAssignments[userId] = [
+            ...(updatedAssignments[userId] || []),
+            ...newAssignments.filter(
+              (survey) =>
+                !(updatedAssignments[userId] || []).some(
+                  (existing) => existing.id === survey.id
+                )
+            ),
+          ];
+        });
+
+        setUserAssignments(updatedAssignments);
+
+        const userNames = selectedUser
+          .map((id) => users.find((u) => u.id === id)?.name)
+          .join(", ");
+        setConfirmationMessage(
+          `Successfully assigned ${selectedSurveys.length} survey${selectedSurveys.length > 1 ? "s" : ""} to ${userNames}`
+        );
+        setTimeout(() => setConfirmationMessage(""), 3000);
+
+        setSelectedUser([]);
+        setSelectedSurveys([]);
+        setUserSearch("");
+        setSurveySearch("");
+      } catch (error) {
+        console.error('Error assigning surveys:', error);
+        setConfirmationMessage('Error assigning surveys. Please try again.');
+        setTimeout(() => setConfirmationMessage(""), 3000);
+      }
     }
   };
 
@@ -867,11 +912,55 @@ const AssignUser = ({
     setShowModalSurveyDropdown(false);
   };
 
+  const removeModalSurveySelection = (surveyId) => {
+    setSelectedSurveysForUser(selectedSurveysForUser.filter(id => id !== surveyId));
+  };
 
 
-  const updateUserSurveys = () => {
-    // Add new surveys
-    if (selectedSurveysForUser.length > 0) {
+
+  const updateUserSurveys = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser?.email) {
+        console.error('No authenticated user found');
+        return;
+      }
+
+      // Get client ID
+      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+      const clientsSnapshot = await getDocs(clientsRef);
+      
+      let clientId = null;
+      clientsSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.email === currentUser.email) {
+          clientId = doc.id;
+        }
+      });
+      
+      if (!clientId) {
+        console.error('No client ID found for current user');
+        return;
+      }
+
+      // Add new surveys to Firebase
+      if (selectedSurveysForUser.length > 0) {
+        const assignmentsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments");
+        
+        for (const surveyId of selectedSurveysForUser) {
+          const assignmentData = {
+            created_at: new Date().toISOString(),
+            is_active: true,
+            survey_id: surveyId,
+            updated_at: new Date().toISOString(),
+            user_id: editingUser.id
+          };
+          
+          await addDoc(assignmentsRef, assignmentData);
+        }
+      }
+
+      // Update local state
       const newSurveys = selectedSurveysForUser.map(surveyId => ({
         ...surveys.find(s => s.id === surveyId),
         active: true
@@ -880,23 +969,23 @@ const AssignUser = ({
       setUserAssignments(prev => ({
         ...prev,
         [editingUser.id]: [
-          ...(prev[editingUser.id] || []).filter(s => s.active !== false), // Remove deactivated surveys
+          ...(prev[editingUser.id] || []).filter(s => s.active !== false),
           ...newSurveys.filter(survey => 
             !(prev[editingUser.id] || []).some(existing => existing.id === survey.id)
           )
         ]
       }));
-    } else {
-      // Only remove deactivated surveys if no new surveys are being added
-      setUserAssignments(prev => ({
-        ...prev,
-        [editingUser.id]: (prev[editingUser.id] || []).filter(s => s.active !== false)
-      }));
+
+      setIsEditModalOpen(false);
+      setEditingUser(null);
+      setSelectedSurveysForUser([]);
+      setConfirmationMessage('Surveys updated successfully!');
+      setTimeout(() => setConfirmationMessage(''), 3000);
+    } catch (error) {
+      console.error('Error updating user surveys:', error);
+      setConfirmationMessage('Error updating surveys. Please try again.');
+      setTimeout(() => setConfirmationMessage(''), 3000);
     }
-    
-    setSelectedSurveysForUser([]);
-    setIsEditModalOpen(false);
-    setEditingUser(null);
   };
 
   const deleteUserAssignments = (userId) => {
