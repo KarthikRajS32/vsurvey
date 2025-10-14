@@ -6,9 +6,10 @@ import { Label } from "../../ui/label";
 import { Plus, Users, Building, Edit, Edit3, Trash2, Mail, UserPlus, UserCheck, UserX } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/dialog";
 import ClientAdminHeader from "./ClientAdminHeader";
-import { createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendPasswordResetEmail, deleteUser } from "firebase/auth";
 import { db, auth } from "../../../firebase";
-import { collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, setDoc, updateDoc, getDocs } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, setDoc, updateDoc, getDocs, where } from "firebase/firestore";
+import { httpsCallable, getFunctions } from "firebase/functions";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
@@ -73,16 +74,13 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
   useEffect(() => {
     const initializeClientId = async () => {
       try {
-        setInitializing(true);
         const id = await getClientId();
         if (!id) {
-          setError('Unable to find client information. Please contact support.');
+          console.warn('Unable to find client ID, but continuing with email-based queries');
         }
         setClientId(id);
       } catch (err) {
-        setError('Failed to initialize client data: ' + err.message);
-      } finally {
-        setInitializing(false);
+        console.error('Failed to get client ID:', err.message);
       }
     };
     
@@ -90,21 +88,60 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
   }, []);
 
   useEffect(() => {
-    if (!clientId) return;
+    const setupUserListener = async () => {
+      try {
+        setInitializing(true);
+        
+        // Wait for auth to be ready
+        const currentUser = auth.currentUser;
+        if (!currentUser?.email) {
+          // Wait a bit for auth to initialize
+          setTimeout(setupUserListener, 1000);
+          return;
+        }
+        
+        console.log('Setting up user listener for:', currentUser.email);
+        
+        const usersRef = collection(db, "users");
+        const q = query(
+          usersRef, 
+          where("created_by", "==", currentUser.email)
+        );
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          console.log('Users snapshot received, count:', snapshot.docs.length);
+          const usersData = snapshot.docs.map(doc => {
+            const data = { id: doc.id, ...doc.data() };
+            console.log('User data:', data);
+            return data;
+          }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Sort in JavaScript
+          setUsers(usersData);
+          setInitializing(false);
+        }, (error) => {
+          console.error('Error in users listener:', error);
+          setError('Failed to load users: ' + error.message);
+          setInitializing(false);
+        });
+        
+        return unsubscribe;
+      } catch (error) {
+        console.error('Error setting up user listener:', error);
+        setError('Failed to initialize user listener');
+        setInitializing(false);
+      }
+    };
     
-    const usersRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "users");
-    const q = query(usersRef, orderBy("created_at", "desc"));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setUsers(usersData);
+    let unsubscribe;
+    setupUserListener().then(unsub => {
+      unsubscribe = unsub;
     });
-
-    return () => unsubscribe();
-  }, [clientId]);
+    
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []); // Remove clientId dependency
 
   console.log('Using clientId:', clientId);
   console.log('Profile:', profile);
@@ -120,34 +157,55 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
     }
 
     try {
-      if (!clientId) {
-        throw new Error('Client ID not found. Please try again.');
+      // Get current user (client) email for created_by field
+      const currentUser = auth.currentUser;
+      if (!currentUser?.email) {
+        throw new Error('User not authenticated. Please log in again.');
       }
+      const clientEmail = currentUser.email;
 
-      // Ensure client document exists first
-      const clientDocRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId);
-      await setDoc(clientDocRef, { created_at: new Date().toISOString() }, { merge: true });
+      // First create Firebase user to get the UID
+      console.log("Creating Firebase user for:", formData.email.trim());
+      const tempPassword = `Temp${Date.now()}!`;
+      const userCredential = await createUserWithEmailAndPassword(
+        secondaryAuth,
+        formData.email.trim(),
+        tempPassword
+      );
+      const firebaseUID = userCredential.user.uid;
+      console.log("Firebase user created with UID:", firebaseUID);
 
+      // Send password reset email
+      await sendPasswordResetEmail(secondaryAuth, formData.email.trim());
+      console.log("Password reset email sent");
+
+      // Create user document with Firebase UID as document ID
       const userData = {
-        full_name: formData.full_name.trim(),
-        email: formData.email.trim(),
-        status: "pending",
+        city: "",
         created_at: new Date().toISOString(),
-        client_id: clientId
+        created_by: clientEmail,
+        education: "",
+        email: formData.email.trim(),
+        email_verified: true,
+        full_name: formData.full_name.trim(),
+        gender: "",
+        id: firebaseUID,
+        is_active: false,
+        is_profile_complete: false,
+        phone: "",
+        profile_photo: "",
+        updated_at: new Date().toISOString()
       };
 
-      console.log('Creating user for clientId:', clientId);
-      console.log('Full database path:', `superadmin/U0UjGVvDJoDbLtWAhyjp/clients/${clientId}/users`);
-      const usersRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "users");
-      await addDoc(usersRef, userData);
-      console.log('✅ User successfully added to client subcollection - NOT as separate document');
-      console.log('✅ This follows the same pattern as questions and surveys');
+      console.log('Creating user document with Firebase UID as document ID:', firebaseUID);
+      const userDocRef = doc(db, "users", firebaseUID);
+      await setDoc(userDocRef, userData);
       
-      await createFirebaseUser(formData.email.trim());
+      console.log('✅ User successfully added to /users collection with Firebase UID as document ID');
 
       setFormData({ full_name: "", email: "" });
-      setMessage("✅ User created successfully!");
-      setTimeout(() => setMessage(""), 5000);
+      setMessage(`✅ User created successfully! Password setup email sent to ${formData.email.trim()}`);
+      setTimeout(() => setMessage(""), 8000);
     } catch (err) {
       setMessage(`❌ Failed to create user: ${err.message}`);
       setTimeout(() => setMessage(""), 8000);
@@ -160,15 +218,15 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
     try {
       setLoading(true);
       const user = users.find(u => u.id === userId);
-      const newStatus = user.status === 'active' ? 'inactive' : 'active';
+      const newIsActive = !user.is_active;
       
-      const userRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "users", userId);
+      const userRef = doc(db, "users", userId);
       await updateDoc(userRef, {
-        status: newStatus,
+        is_active: newIsActive,
         updated_at: new Date().toISOString()
       });
       
-      setMessage(`✅ User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully!`);
+      setMessage(`✅ User ${newIsActive ? 'activated' : 'deactivated'} successfully!`);
       setTimeout(() => setMessage(""), 3000);
     } catch (err) {
       setMessage(`❌ Failed to update user status: ${err.message}`);
@@ -187,7 +245,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
     if (userToDelete) {
       try {
         setLoading(true);
-        const userRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "users", userToDelete.id);
+        const userRef = doc(db, "users", userToDelete.id);
         await deleteDoc(userRef);
         setMessage("✅ User deleted successfully!");
         setTimeout(() => setMessage(""), 3000);
@@ -221,7 +279,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
     
     try {
       setLoading(true);
-      const userRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "users", editingUser.id);
+      const userRef = doc(db, "users", editingUser.id);
       await updateDoc(userRef, {
         full_name: editFormData.full_name.trim(),
         updated_at: new Date().toISOString()
@@ -385,8 +443,8 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
           </CardHeader>
           <CardContent>
             {(loading || initializing) && <p>Loading users...</p>}
-            {!initializing && !clientId && (
-              <p className="text-red-600">Unable to load client data. Please refresh the page.</p>
+            {!initializing && !auth.currentUser && (
+              <p className="text-red-600">Please log in to view users.</p>
             )}
 
             <div className="space-y-4 max-h-96 overflow-y-auto">
@@ -399,11 +457,10 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                         <h3 className="font-semibold">{user.full_name}</h3>
                         <span
                           className={`px-2 py-1 text-xs rounded-full ${
-                            user.status === 'active' ? "bg-green-100 text-green-800" : 
-                            user.status === 'inactive' ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"
+                            user.is_active ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
                           }`}
                         >
-                          {user.status === 'active' ? "Active" : user.status === 'inactive' ? "Inactive" : "Pending"}
+                          {user.is_active ? "Active" : "Pending"}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mb-1">
@@ -436,9 +493,9 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                         variant="outline"
                         size="sm"
                         onClick={() => handleToggleStatus(user.id)}
-                        title={user.status === 'active' ? 'Deactivate User' : 'Activate User'}
+                        title={user.is_active ? 'Deactivate User' : 'Activate User'}
                       >
-                        {user.status === 'active' ? (
+                        {user.is_active ? (
                           <UserX className="w-4 h-4" />
                         ) : (
                           <UserCheck className="w-4 h-4" />
@@ -464,7 +521,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                 </div>
               ))}
 
-              {users.length === 0 && !loading && !initializing && clientId && (
+              {users.length === 0 && !loading && !initializing && auth.currentUser && (
                 <p className="text-gray-500 text-center py-8">No users found</p>
               )}
             </div>
@@ -496,7 +553,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                   Active Users
                 </p>
                 <p className="text-2xl font-bold">
-                  {users.filter((u) => u.status === 'active').length}
+                  {users.filter((u) => u.is_active === true).length}
                 </p>
               </div>
               <UserCheck className="w-8 h-8 text-green-500" />
@@ -512,7 +569,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                   Pending Users
                 </p>
                 <p className="text-2xl font-bold">
-                  {users.filter((u) => u.status === 'pending' || (!u.status && !u.is_active)).length}
+                  {users.filter((u) => u.is_active === false).length}
                 </p>
               </div>
               <Mail className="w-8 h-8 text-yellow-500" />
@@ -528,7 +585,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                   Inactive Users
                 </p>
                 <p className="text-2xl font-bold">
-                  {users.filter((u) => u.status === 'inactive').length}
+                  {users.filter((u) => u.is_active === false && u.email_verified === false).length}
                 </p>
               </div>
               <UserX className="w-8 h-8 text-red-500" />

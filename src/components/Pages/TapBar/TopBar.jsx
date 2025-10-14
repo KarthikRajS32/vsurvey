@@ -122,6 +122,7 @@ const TopBar = ({
         { id: "Questions", label: "Create Questions" },
         { id: "surveys", label: "Create Survey" },
         { id: "assignuser", label: "Assign User" },
+        { id: "results", label: "Survey Results" },
       ];
   return (
     <div className="fixed top-0 left-0 right-0 bg-white shadow-sm border-b z-50">

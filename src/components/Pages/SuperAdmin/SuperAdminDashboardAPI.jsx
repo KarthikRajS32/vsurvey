@@ -471,9 +471,13 @@ import {
   UserX,
   Mail,
   UserPlus,
+  X,
+  FileText,
+  HelpCircle,
 } from "lucide-react";
 import TopBar from "../TapBar/TopBar";
 import SuperAdminSidebar from "../SideBar/SuperAdminSidebar";
+import SurveyResult from "./SurveyResult";
 import { db, auth } from "../../../firebase";
 import {
   collection,
@@ -488,6 +492,7 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signOut,
 } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -522,6 +527,14 @@ const SuperAdminDashboardAPI = () => {
     clientId: "",
   });
   const [message, setMessage] = useState("");
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [clientDetails, setClientDetails] = useState({
+    users: [],
+    surveys: [],
+    questions: []
+  });
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Load clients from Firebase with real-time listener for status changes only
   useEffect(() => {
@@ -777,9 +790,72 @@ const SuperAdminDashboardAPI = () => {
     }
   };
 
-  const handleLogout = () => {
-    // Handle logout logic
-    window.location.reload();
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Logout error:', error);
+      window.location.reload();
+    }
+  };
+
+  const fetchClientDetails = async (clientId, client = selectedClient) => {
+    try {
+      setLoadingDetails(true);
+      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      
+      // Fetch users from global users collection filtered by created_by
+      let users = [];
+      try {
+        const globalUsersRef = collection(db, "users");
+        const globalUsersSnapshot = await getDocs(globalUsersRef);
+        
+        globalUsersSnapshot.forEach((doc) => {
+          const userData = doc.data();
+          if (userData.created_by === client?.email) {
+            users.push({ id: doc.id, ...userData });
+          }
+        });
+      } catch (error) {
+        console.error("Error fetching from global users collection:", error);
+      }
+      
+      // Fetch surveys
+      const surveysRef = collection(db, "superadmin", superadminId, "clients", clientId, "surveys");
+      const surveysSnapshot = await getDocs(surveysRef);
+      const surveys = [];
+      surveysSnapshot.forEach((doc) => {
+        surveys.push({ id: doc.id, ...doc.data() });
+      });
+      
+      // Fetch questions
+      const questionsRef = collection(db, "superadmin", superadminId, "clients", clientId, "questions");
+      const questionsSnapshot = await getDocs(questionsRef);
+      const questions = [];
+      questionsSnapshot.forEach((doc) => {
+        questions.push({ id: doc.id, ...doc.data() });
+      });
+      
+      console.log('Final client details:', { users: users.length, surveys: surveys.length, questions: questions.length });
+      setClientDetails({ users, surveys, questions });
+    } catch (error) {
+      console.error("Error fetching client details:", error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const openClientModal = async (client) => {
+    setSelectedClient(client);
+    setIsClientModalOpen(true);
+    await fetchClientDetails(client.id, client);
+  };
+
+  const closeClientModal = () => {
+    setIsClientModalOpen(false);
+    setSelectedClient(null);
+    setClientDetails({ users: [], surveys: [], questions: [] });
   };
 
   const renderContent = () => {
@@ -885,7 +961,8 @@ const SuperAdminDashboardAPI = () => {
                     {clientAdmins.map((admin) => (
                       <div
                         key={admin.id}
-                        className="border rounded-lg p-4 bg-white"
+                        className="border rounded-lg p-4 bg-white hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => openClientModal(admin)}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -1037,21 +1114,7 @@ const SuperAdminDashboardAPI = () => {
           </>
         );
       case "results":
-        return (
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Survey Results
-            </h1>
-            <p className="text-gray-600">
-              View and analyze survey responses from all clients
-            </p>
-            <div className="mt-8 p-8 bg-gray-100 rounded-lg text-center">
-              <p className="text-gray-500">
-                Survey results feature coming soon...
-              </p>
-            </div>
-          </div>
-        );
+        return <SurveyResult />;
       default:
         return null;
     }
@@ -1082,6 +1145,154 @@ const SuperAdminDashboardAPI = () => {
       >
         <div className="max-w-7xl mx-auto">{renderContent()}</div>
       </main>
+
+      {/* Client Details Modal */}
+      {isClientModalOpen && selectedClient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{selectedClient.name}</h2>
+                <p className="text-gray-600">{selectedClient.email}</p>
+              </div>
+              <button
+                onClick={closeClientModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              {loadingDetails ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-gray-500">Loading client details...</div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Stats Overview */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-5 h-5 text-blue-600" />
+                        <span className="font-semibold text-blue-900">Users</span>
+                      </div>
+                      <p className="text-2xl font-bold text-blue-600 mt-1">{clientDetails.users.length}</p>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-green-600" />
+                        <span className="font-semibold text-green-900">Surveys</span>
+                      </div>
+                      <p className="text-2xl font-bold text-green-600 mt-1">{clientDetails.surveys.length}</p>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <HelpCircle className="w-5 h-5 text-purple-600" />
+                        <span className="font-semibold text-purple-900">Questions</span>
+                      </div>
+                      <p className="text-2xl font-bold text-purple-600 mt-1">{clientDetails.questions.length}</p>
+                    </div>
+                  </div>
+
+                  {/* Users Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Users className="w-5 h-5" />
+                      Users ({clientDetails.users.length})
+                    </h3>
+                    {clientDetails.users.length > 0 ? (
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                        <div className="space-y-2">
+                          {clientDetails.users.map((user) => (
+                            <div key={user.id} className="flex items-center justify-between bg-white p-3 rounded border">
+                              <div>
+                                <p className="font-medium">{user.full_name || user.name}</p>
+                                <p className="text-sm text-gray-600">{user.email}</p>
+                              </div>
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                user.status === 'active' ? 'bg-green-100 text-green-800' :
+                                user.status === 'inactive' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {user.status || 'pending'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">No users created yet</p>
+                    )}
+                  </div>
+
+                  {/* Surveys Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5" />
+                      Surveys ({clientDetails.surveys.length})
+                    </h3>
+                    {clientDetails.surveys.length > 0 ? (
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                        <div className="space-y-2">
+                          {clientDetails.surveys.map((survey) => (
+                            <div key={survey.id} className="bg-white p-3 rounded border">
+                              <p className="font-medium">{survey.name}</p>
+                              <p className="text-sm text-gray-600">
+                                Questions: {survey.questionCount || survey.questions?.length || 0}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                Created: {survey.createdAt ? new Date(survey.createdAt).toLocaleDateString() : 'N/A'}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">No surveys created yet</p>
+                    )}
+                  </div>
+
+                  {/* Questions Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <HelpCircle className="w-5 h-5" />
+                      Questions ({clientDetails.questions.length})
+                    </h3>
+                    {clientDetails.questions.length > 0 ? (
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                        <div className="space-y-2">
+                          {clientDetails.questions.map((question) => (
+                            <div key={question.id} className="bg-white p-3 rounded border">
+                              <p className="font-medium">{question.text}</p>
+                              <div className="flex items-center gap-4 mt-1">
+                                <span className="text-sm text-gray-600">Type: {question.type}</span>
+                                {question.options && question.options.length > 0 && (
+                                  <span className="text-sm text-gray-600">Options: {question.options.length}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">No questions created yet</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end p-6 border-t bg-gray-50">
+              <Button onClick={closeClientModal} variant="outline">
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
