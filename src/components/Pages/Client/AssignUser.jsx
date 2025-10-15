@@ -640,7 +640,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Edit3, Trash2 } from "lucide-react";
 import { db, auth } from "../../../firebase";
-import { collection, getDocs, query, where, addDoc } from "firebase/firestore";
+import { collection, getDocs, query, where, addDoc, updateDoc, doc } from "firebase/firestore";
 
 const AssignUser = ({
   profile,
@@ -665,10 +665,16 @@ const AssignUser = ({
   const [selectedSurveysForUser, setSelectedSurveysForUser] = useState([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+  const [assignmentDocs, setAssignmentDocs] = useState({});
 
   useEffect(() => {
-    loadUsers();
-    loadSurveys();
+    const loadData = async () => {
+      await loadUsers();
+      await loadSurveys();
+      await loadAssignments();
+    };
+    
+    loadData();
     
     // Listen for user updates
     const handleUsersUpdated = () => {
@@ -682,6 +688,12 @@ const AssignUser = ({
       window.removeEventListener('usersUpdated', handleUsersUpdated);
     };
   }, [profile]);
+
+  useEffect(() => {
+    if (surveys.length > 0) {
+      loadAssignments();
+    }
+  }, [surveys]);
 
 
 
@@ -699,15 +711,17 @@ const AssignUser = ({
       const usersList = [];
       snapshot.forEach((doc) => {
         const userData = doc.data();
-        if (userData.created_by === currentUser.email) {
-          console.log('Found user:', userData);
+        if (userData.created_by === currentUser.email && 
+            userData.status === "active" && 
+            userData.is_active === true) {
+          console.log('Found active user:', userData);
           usersList.push({
             id: doc.id,
             name: userData.full_name || userData.fullName || userData.name || userData.email
           });
         }
       });
-      console.log('Loaded users:', usersList);
+      console.log('Loaded active users:', usersList);
       setUsers(usersList);
     } catch (error) {
       console.error("Error loading users:", error);
@@ -751,6 +765,76 @@ const AssignUser = ({
       setSurveys(surveysList);
     } catch (error) {
       console.error("Error loading surveys:", error);
+    }
+  };
+
+  const loadAssignments = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser?.email) {
+        console.error('No authenticated user found');
+        return;
+      }
+
+      // Get client ID
+      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+      const clientsSnapshot = await getDocs(clientsRef);
+      
+      let clientId = null;
+      clientsSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.email === currentUser.email) {
+          clientId = doc.id;
+        }
+      });
+      
+      if (!clientId) {
+        console.error('No client ID found for current user');
+        return;
+      }
+
+      // Load assignments from Firebase
+      const assignmentsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments");
+      const snapshot = await getDocs(assignmentsRef);
+      
+      const assignments = {};
+      const docs = {};
+      
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const userId = data.user_id;
+        const surveyId = data.survey_id;
+        
+        if (!assignments[userId]) {
+          assignments[userId] = [];
+        }
+        
+        assignments[userId].push({
+          id: surveyId,
+          name: surveyId, // Will be updated after surveys load
+          active: data.is_active
+        });
+        
+        docs[`${userId}_${surveyId}`] = docSnap.id;
+      });
+      
+      // Update survey names if surveys are loaded
+      if (surveys.length > 0) {
+        Object.keys(assignments).forEach(userId => {
+          assignments[userId] = assignments[userId].map(assignment => {
+            const survey = surveys.find(s => s.id === assignment.id);
+            return {
+              ...assignment,
+              name: survey?.name || assignment.name
+            };
+          });
+        });
+      }
+      
+      setUserAssignments(assignments);
+      setAssignmentDocs(docs);
+    } catch (error) {
+      console.error("Error loading assignments:", error);
     }
   };
 
@@ -888,13 +972,64 @@ const AssignUser = ({
     }
   };
 
-  const toggleSurveyStatus = (userId, surveyId) => {
-    setUserAssignments((prev) => ({
-      ...prev,
-      [userId]: prev[userId].map((survey) =>
-        survey.id === surveyId ? { ...survey, active: !survey.active } : survey
-      ),
-    }));
+  const toggleSurveyStatus = async (userId, surveyId) => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser?.email) {
+        console.error('No authenticated user found');
+        return;
+      }
+
+      // Get client ID
+      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+      const clientsSnapshot = await getDocs(clientsRef);
+      
+      let clientId = null;
+      clientsSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.email === currentUser.email) {
+          clientId = doc.id;
+        }
+      });
+      
+      if (!clientId) {
+        console.error('No client ID found for current user');
+        return;
+      }
+
+      // Get current status and toggle it
+      const currentAssignment = userAssignments[userId]?.find(s => s.id === surveyId);
+      const newStatus = !currentAssignment?.active;
+      
+      // Find the assignment document by querying
+      const assignmentsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments");
+      const q = query(assignmentsRef, where("user_id", "==", userId), where("survey_id", "==", surveyId));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const assignmentDoc = querySnapshot.docs[0];
+        const assignmentRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments", assignmentDoc.id);
+        
+        await updateDoc(assignmentRef, {
+          is_active: newStatus,
+          updated_at: new Date().toISOString()
+        });
+        
+        // Update local state
+        setUserAssignments((prev) => ({
+          ...prev,
+          [userId]: prev[userId].map((survey) =>
+            survey.id === surveyId ? { ...survey, active: newStatus } : survey
+          ),
+        }));
+        
+        console.log(`Survey ${surveyId} for user ${userId} ${newStatus ? 'activated' : 'deactivated'}`);
+      } else {
+        console.error('Assignment document not found');
+      }
+    } catch (error) {
+      console.error('Error toggling survey status:', error);
+    }
   };
 
   const openEditModal = (userId) => {

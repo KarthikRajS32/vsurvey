@@ -535,6 +535,11 @@ const SuperAdminDashboardAPI = () => {
     questions: []
   });
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
+  const [editFormData, setEditFormData] = useState({ name: "" });
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState(null);
 
   // Load clients from Firebase with real-time listener for status changes only
   useEffect(() => {
@@ -690,20 +695,61 @@ const SuperAdminDashboardAPI = () => {
     }
   };
 
-  const handleDelete = async (clientId) => {
-    if (window.confirm("Are you sure you want to delete this client admin?")) {
-      try {
-        const superadminId = "U0UjGVvDJoDbLtWAhyjp";
-        await deleteDoc(
-          doc(db, "superadmin", superadminId, "clients", clientId)
-        );
-        setMessage("Client admin deleted successfully!");
-        setTimeout(() => setMessage(""), 3000);
-        loadClients();
-      } catch (error) {
-        console.error("Error deleting client:", error);
-        setMessage("Failed to delete client admin");
-      }
+  const openEditModal = (e, client) => {
+    e.stopPropagation();
+    setEditingClient(client);
+    setEditFormData({ name: client.name });
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingClient(null);
+    setEditFormData({ name: "" });
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      await updateDoc(
+        doc(db, "superadmin", superadminId, "clients", editingClient.id),
+        { name: editFormData.name.trim() }
+      );
+      setMessage("Client updated successfully!");
+      setTimeout(() => setMessage(""), 3000);
+      closeEditModal();
+      loadClients();
+    } catch (error) {
+      console.error("Error updating client:", error);
+      setMessage("Failed to update client");
+    }
+  };
+
+  const openDeleteModal = (e, client) => {
+    e.stopPropagation();
+    setClientToDelete(client);
+    setIsDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setClientToDelete(null);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      await deleteDoc(
+        doc(db, "superadmin", superadminId, "clients", clientToDelete.id)
+      );
+      setMessage("Client admin deleted successfully!");
+      setTimeout(() => setMessage(""), 3000);
+      closeDeleteModal();
+      loadClients();
+    } catch (error) {
+      console.error("Error deleting client:", error);
+      setMessage("Failed to delete client admin");
     }
   };
 
@@ -772,18 +818,21 @@ const SuperAdminDashboardAPI = () => {
     }
   };
 
-  const toggleClientStatus = async (clientId, currentStatus) => {
+  const toggleClientStatus = async (clientId, currentIsActive) => {
     try {
       const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      const newIsActive = !currentIsActive;
+      const newStatus = newIsActive ? "active" : "inactive";
+      
       await updateDoc(
         doc(db, "superadmin", superadminId, "clients", clientId),
         {
-          isActive: !currentStatus,
+          isActive: newIsActive,
+          status: newStatus
         }
       );
-      setMessage("Client status updated successfully!");
+      setMessage(`Client ${newIsActive ? 'activated' : 'deactivated'} successfully!`);
       setTimeout(() => setMessage(""), 3000);
-      loadClients();
     } catch (error) {
       console.error("Error updating client status:", error);
       setMessage("Failed to update client status");
@@ -997,36 +1046,50 @@ const SuperAdminDashboardAPI = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => createFirebaseUser(admin.email)}
-                              title="Create Firebase user & send password email"
-                            >
-                              <UserPlus className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => resendPasswordEmail(admin.email)}
+                              onClick={(e) => resendPasswordEmail(admin.email) && e.stopPropagation()}
                               title="Resend password setup email"
                             >
                               <Mail className="w-4 h-4" />
                             </Button>
+                            {admin.status === "active" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleClientStatus(admin.id, admin.isActive);
+                                }}
+                                title="Deactivate client"
+                              >
+                                <UserX className="w-4 h-4" />
+                              </Button>
+                            )}
+                            {admin.status === "inactive" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleClientStatus(admin.id, admin.isActive);
+                                }}
+                                title="Activate client"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() =>
-                                toggleClientStatus(admin.id, admin.isActive)
-                              }
+                              onClick={(e) => openEditModal(e, admin)}
+                              title="Edit client"
                             >
-                              {admin.isActive ? (
-                                <UserX className="w-4 h-4" />
-                              ) : (
-                                <UserCheck className="w-4 h-4" />
-                              )}
+                              <Edit3 className="w-4 h-4" />
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDelete(admin.id)}
+                              onClick={(e) => openDeleteModal(e, admin)}
+                              title="Delete client"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -1289,6 +1352,96 @@ const SuperAdminDashboardAPI = () => {
               <Button onClick={closeClientModal} variant="outline">
                 Close
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Client Modal */}
+      {isEditModalOpen && editingClient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">Edit Client</h2>
+              <button onClick={closeEditModal} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+              <div>
+                <Label htmlFor="editName">Company Name *</Label>
+                <Input
+                  id="editName"
+                  type="text"
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({ name: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="editEmail">Admin Email</Label>
+                <Input
+                  id="editEmail"
+                  type="email"
+                  value={editingClient.email}
+                  disabled
+                  className="bg-gray-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="editClientId">Client ID</Label>
+                <Input
+                  id="editClientId"
+                  type="text"
+                  value={editingClient.clientId || editingClient.id}
+                  disabled
+                  className="bg-gray-100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="editCreated">Created</Label>
+                <Input
+                  id="editCreated"
+                  type="text"
+                  value={new Date(editingClient.createdAt).toLocaleDateString()}
+                  disabled
+                  className="bg-gray-100"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={closeEditModal}>
+                  Cancel
+                </Button>
+                <Button type="submit">Update Client</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && clientToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-xl font-bold text-gray-900">Confirm Delete</h2>
+              <button onClick={closeDeleteModal} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to delete <strong>{clientToDelete.name}</strong>?
+                This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={closeDeleteModal}>
+                  Cancel
+                </Button>
+                <Button type="button" variant="destructive" onClick={confirmDelete}>
+                  Delete
+                </Button>
+              </div>
             </div>
           </div>
         </div>

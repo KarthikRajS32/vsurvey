@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-import { BarChart3, Users, Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { BarChart3, Users, Calendar, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db, auth } from "../../../firebase";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 
@@ -14,6 +15,9 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
   const [totalResponses, setTotalResponses] = useState(0);
   const [locationCache, setLocationCache] = useState({});
   const [surveyQuestions, setSurveyQuestions] = useState({});
+  const [sortConfig, setSortConfig] = useState({});
+  const [filters, setFilters] = useState({});
+  const [openDropdowns, setOpenDropdowns] = useState({});
 
   const getLocationName = async (lat, lng) => {
     const cacheKey = `${lat},${lng}`;
@@ -251,9 +255,81 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
             <>
               {surveys.map((survey) => {
                 const isExpanded = expandedSurvey === survey.id;
-                const responses = surveyResponses[survey.id] || [];
+                const allResponses = surveyResponses[survey.id] || [];
                 const questions = surveyQuestions[survey.id] || {};
                 const questionIds = Object.keys(questions);
+                
+                // Apply filters
+                const filteredResponses = allResponses.filter(response => {
+                  const surveyFilters = filters[survey.id] || {};
+                  return (
+                    (!surveyFilters.area || response.area === surveyFilters.area) &&
+                    (!surveyFilters.boothNumber || response.boothNumber === surveyFilters.boothNumber) &&
+                    (!surveyFilters.constitution || response.constitution === surveyFilters.constitution) &&
+                    (!surveyFilters.userName || response.userName === surveyFilters.userName)
+                  );
+                });
+                
+                // Apply sorting
+                const sortedResponses = [...filteredResponses].sort((a, b) => {
+                  const config = sortConfig[survey.id];
+                  if (!config) return 0;
+                  
+                  let aValue = a[config.key];
+                  let bValue = b[config.key];
+                  
+                  // Handle question answers
+                  if (config.key.startsWith('question_')) {
+                    const questionId = config.key.replace('question_', '');
+                    aValue = a.answers?.[questionId] || '';
+                    bValue = b.answers?.[questionId] || '';
+                  }
+                  
+                  // Handle different data types
+                  if (typeof aValue === 'string' && typeof bValue === 'string') {
+                    aValue = aValue.toLowerCase();
+                    bValue = bValue.toLowerCase();
+                  }
+                  
+                  if (aValue < bValue) return config.direction === 'asc' ? -1 : 1;
+                  if (aValue > bValue) return config.direction === 'asc' ? 1 : -1;
+                  return 0;
+                });
+                
+                const responses = sortedResponses;
+                
+                // Get unique values for filters
+                const getUniqueValues = (key) => {
+                  const values = allResponses.map(r => r[key]).filter(v => v && v !== 'N/A');
+                  return [...new Set(values)].sort();
+                };
+                
+                const handleSort = (key) => {
+                  setSortConfig(prev => {
+                    const currentConfig = prev[survey.id];
+                    const newDirection = currentConfig?.key === key && currentConfig?.direction === 'asc' ? 'desc' : 'asc';
+                    return {
+                      ...prev,
+                      [survey.id]: { key, direction: newDirection }
+                    };
+                  });
+                };
+                
+                const handleFilter = (filterKey, value) => {
+                  setFilters(prev => ({
+                    ...prev,
+                    [survey.id]: {
+                      ...prev[survey.id],
+                      [filterKey]: value === 'all' ? null : value
+                    }
+                  }));
+                };
+                
+                const getSortIcon = (key) => {
+                  const config = sortConfig[survey.id];
+                  if (config?.key !== key) return <ArrowUpDown className="w-4 h-4" />;
+                  return config.direction === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
+                };
 
                 return (
                   <Card key={survey.id} className="overflow-hidden">
@@ -269,6 +345,59 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
                               {survey.createdAt ? new Date(survey.createdAt).toLocaleDateString() : 'N/A'}
                             </div>
                           </div>
+                          
+                          {/* Filters */}
+                          {isExpanded && allResponses.length > 0 && (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                              {['area', 'boothNumber', 'constitution', 'userName'].map((filterKey) => {
+                                const labels = { area: 'Area', boothNumber: 'Booth Number', constitution: 'Constitution', userName: 'User Name' };
+                                const placeholders = { area: 'All Areas', boothNumber: 'All Booths', constitution: 'All Constitutions', userName: 'All Users' };
+                                const dropdownKey = `${survey.id}_${filterKey}`;
+                                const isOpen = openDropdowns[dropdownKey];
+                                const currentFilter = filters[survey.id]?.[filterKey];
+                                
+                                return (
+                                  <div key={filterKey} className="relative">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">{labels[filterKey]}</label>
+                                    <button
+                                      onClick={() => setOpenDropdowns(prev => ({ ...prev, [dropdownKey]: !prev[dropdownKey] }))}
+                                      className="w-full h-8 px-3 text-xs border border-gray-300 rounded-md bg-white text-left flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    >
+                                      <span className={currentFilter ? 'text-gray-900' : 'text-gray-500'}>
+                                        {currentFilter || placeholders[filterKey]}
+                                      </span>
+                                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                                    </button>
+                                    {isOpen && (
+                                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                                        <div
+                                          onClick={() => {
+                                            handleFilter(filterKey, 'all');
+                                            setOpenDropdowns(prev => ({ ...prev, [dropdownKey]: false }));
+                                          }}
+                                          className="px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
+                                        >
+                                          {placeholders[filterKey]}
+                                        </div>
+                                        {getUniqueValues(filterKey).map(value => (
+                                          <div
+                                            key={value}
+                                            onClick={() => {
+                                              handleFilter(filterKey, value);
+                                              setOpenDropdowns(prev => ({ ...prev, [dropdownKey]: false }));
+                                            }}
+                                            className="px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
+                                          >
+                                            {value}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                         <Button
                           onClick={() => toggleSurveyExpansion(survey.id)}
@@ -292,18 +421,48 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
                               <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                   <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">S.No</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                                      <button onClick={() => handleSort('index')} className="flex items-center gap-1 hover:text-gray-700">
+                                        S.No {getSortIcon('index')}
+                                      </button>
+                                    </th>
                                     {questionIds.map((questionId) => (
                                       <th key={questionId} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        {questions[questionId]}
+                                        <button onClick={() => handleSort(`question_${questionId}`)} className="flex items-center gap-1 hover:text-gray-700">
+                                          {questions[questionId]} {getSortIcon(`question_${questionId}`)}
+                                        </button>
                                       </th>
                                     ))}
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Area</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Booth Number</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Constitution</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted At</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <button onClick={() => handleSort('area')} className="flex items-center gap-1 hover:text-gray-700">
+                                        Area {getSortIcon('area')}
+                                      </button>
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <button onClick={() => handleSort('boothNumber')} className="flex items-center gap-1 hover:text-gray-700">
+                                        Booth Number {getSortIcon('boothNumber')}
+                                      </button>
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <button onClick={() => handleSort('constitution')} className="flex items-center gap-1 hover:text-gray-700">
+                                        Constitution {getSortIcon('constitution')}
+                                      </button>
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <button onClick={() => handleSort('locationName')} className="flex items-center gap-1 hover:text-gray-700">
+                                        Location {getSortIcon('locationName')}
+                                      </button>
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <button onClick={() => handleSort('formattedSubmittedAt')} className="flex items-center gap-1 hover:text-gray-700">
+                                        Submitted At {getSortIcon('formattedSubmittedAt')}
+                                      </button>
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                      <button onClick={() => handleSort('userName')} className="flex items-center gap-1 hover:text-gray-700">
+                                        User Name {getSortIcon('userName')}
+                                      </button>
+                                    </th>
                                   </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">

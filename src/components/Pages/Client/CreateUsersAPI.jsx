@@ -191,6 +191,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
         gender: "",
         id: firebaseUID,
         is_active: false,
+        status: "pending",
         is_profile_complete: false,
         phone: "",
         profile_photo: "",
@@ -218,11 +219,20 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
     try {
       setLoading(true);
       const user = users.find(u => u.id === userId);
-      const newIsActive = !user.is_active;
+      
+      let newIsActive, newStatus;
+      if (user.status === "pending") {
+        newIsActive = true;
+        newStatus = "active";
+      } else {
+        newIsActive = !user.is_active;
+        newStatus = newIsActive ? "active" : "inactive";
+      }
       
       const userRef = doc(db, "users", userId);
       await updateDoc(userRef, {
         is_active: newIsActive,
+        status: newStatus,
         updated_at: new Date().toISOString()
       });
       
@@ -457,10 +467,14 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                         <h3 className="font-semibold">{user.full_name}</h3>
                         <span
                           className={`px-2 py-1 text-xs rounded-full ${
-                            user.is_active ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                            user.status === "active"
+                              ? "bg-green-100 text-green-800"
+                              : user.status === "pending"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-red-100 text-red-800"
                           }`}
                         >
-                          {user.is_active ? "Active" : "Pending"}
+                          {user.status === "active" ? "Active" : user.status === "pending" ? "Pending" : "Inactive"}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mb-1">
@@ -476,31 +490,41 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => createFirebaseUser(user.email)}
-                        title="Create Firebase user & send password email"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
                         onClick={() => resendPasswordEmail(user.email)}
                         title="Resend password setup email"
                       >
                         <Mail className="w-4 h-4" />
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggleStatus(user.id)}
-                        title={user.is_active ? 'Deactivate User' : 'Activate User'}
-                      >
-                        {user.is_active ? (
-                          <UserX className="w-4 h-4" />
-                        ) : (
+                      {user.status === "pending" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleStatus(user.id)}
+                          title="Activate User"
+                        >
                           <UserCheck className="w-4 h-4" />
-                        )}
-                      </Button>
+                        </Button>
+                      )}
+                      {user.status === "active" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleStatus(user.id)}
+                          title="Deactivate User"
+                        >
+                          <UserX className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {user.status === "inactive" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleStatus(user.id)}
+                          title="Activate User"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -553,7 +577,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                   Active Users
                 </p>
                 <p className="text-2xl font-bold">
-                  {users.filter((u) => u.is_active === true).length}
+                  {users.filter((u) => u.status === "active").length}
                 </p>
               </div>
               <UserCheck className="w-8 h-8 text-green-500" />
@@ -569,7 +593,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                   Pending Users
                 </p>
                 <p className="text-2xl font-bold">
-                  {users.filter((u) => u.is_active === false).length}
+                  {users.filter((u) => u.status === "pending").length}
                 </p>
               </div>
               <Mail className="w-8 h-8 text-yellow-500" />
@@ -585,7 +609,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
                   Inactive Users
                 </p>
                 <p className="text-2xl font-bold">
-                  {users.filter((u) => u.is_active === false && u.email_verified === false).length}
+                  {users.filter((u) => u.status === "inactive").length}
                 </p>
               </div>
               <UserX className="w-8 h-8 text-red-500" />
