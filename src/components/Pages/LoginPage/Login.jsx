@@ -4,7 +4,7 @@ import { Input } from '../../ui/input'
 import { Card, CardContent } from '../../ui/card'
 import loginImage from '../../../assets/1.png'
 import authService from '../../../services/authService'
-import { activateClientAdmin, isClientAdminPending, clientAdminExists } from '../../../services/clientStatusService'
+import { activateClientAdmin, isClientAdminPending, clientAdminExists, isClientAdminActive, needsProfileSetup } from '../../../services/clientStatusService'
 import { activateUser, isUserPending, userExists } from '../../../services/userStatusService'
 import { notifyClientStatusChange } from '../../../services/superAdminNotification'
 
@@ -24,6 +24,31 @@ const Login = ({ onLogin }) => {
         return
       }
 
+      // Check if client admin exists and their status BEFORE Firebase authentication
+      console.log('DEBUG: Checking if client admin exists:', email)
+      const clientExists = await clientAdminExists(email)
+      console.log('DEBUG: Client admin exists:', clientExists)
+      
+      if (clientExists) {
+        // Check client status before allowing authentication
+        console.log('DEBUG: Checking if client admin is pending:', email)
+        const isPending = await isClientAdminPending(email)
+        console.log('DEBUG: Client admin is pending:', isPending)
+        
+        if (!isPending) {
+          // Check if client is active before allowing login
+          console.log('DEBUG: Checking if client admin is active:', email)
+          const isActive = await isClientAdminActive(email)
+          console.log('DEBUG: Client admin is active:', isActive)
+          
+          if (!isActive) {
+            console.log('❌ Client admin is inactive, login denied:', email)
+            alert('Your account has been deactivated. Please contact the administrator.')
+            return
+          }
+        }
+      }
+
       // Use Firebase authentication for client admins
       const result = await authService.signIn(email, password)
       
@@ -38,16 +63,9 @@ const Login = ({ onLogin }) => {
           return
         }
         
-        // Check if client admin exists in our database
-        console.log('DEBUG: Checking if client admin exists:', email)
-        const clientExists = await clientAdminExists(email)
-        console.log('DEBUG: Client admin exists:', clientExists)
-        
         if (clientExists) {
           // Check if client admin is pending and activate them
-          console.log('DEBUG: Checking if client admin is pending:', email)
           const isPending = await isClientAdminPending(email)
-          console.log('DEBUG: Client admin is pending:', isPending)
           
           if (isPending) {
             console.log('DEBUG: Attempting to activate client admin:', email)
@@ -56,15 +74,12 @@ const Login = ({ onLogin }) => {
             
             if (activated) {
               console.log('✅ Client admin activated successfully:', email)
-              // Status will be updated via Firestore real-time listener
               // Get fresh token after activation
               const freshToken = await result.user.getIdToken(true)
               localStorage.setItem('firebaseToken', freshToken)
             } else {
               console.log('❌ Failed to activate client admin:', email)
             }
-          } else {
-            console.log('DEBUG: Client admin is not pending, current status unknown')
           }
         } else {
           // Check if regular user exists in our database
@@ -100,12 +115,14 @@ const Login = ({ onLogin }) => {
         }
         
         // Wait a moment for Firebase auth state to update
-        setTimeout(() => {
+        setTimeout(async () => {
           // Determine user type based on database presence
           if (clientExists) {
+            // Check if profile setup is needed
+            const profileSetupNeeded = await needsProfileSetup(email)
             onLogin('client', { 
               email, 
-              isFirstTime: false, 
+              isFirstTime: profileSetupNeeded, 
               profile: null 
             })
           } else {

@@ -90,3 +90,75 @@ export const isClientAdminPending = async (email) => {
   const { exists, status } = await getClientAdminStatus(email);
   return exists && status === "pending";
 };
+
+/**
+ * Check if client admin is active and can log in
+ * @param {string} email - Client admin email
+ * @returns {Promise<boolean>} - True if active, false otherwise
+ */
+export const isClientAdminActive = async (email) => {
+  const { exists, status } = await getClientAdminStatus(email);
+  return exists && status === "active";
+};
+
+/**
+ * Check if client admin needs profile setup
+ * @param {string} email - Client admin email
+ * @returns {Promise<boolean>} - True if profile setup needed, false otherwise
+ */
+export const needsProfileSetup = async (email) => {
+  try {
+    const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+    const clientsRef = collection(db, "superadmin", superadminId, "clients");
+    const q = query(clientsRef, where("email", "==", email));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return false;
+    }
+    
+    const clientData = snapshot.docs[0].data();
+    return clientData.is_first_time === false;
+    
+  } catch (error) {
+    console.error('Error checking profile setup status:', error);
+    return false;
+  }
+};
+
+/**
+ * Update client profile data and mark setup as complete
+ * @param {string} email - Client admin email
+ * @param {Object} profileData - Profile data to save
+ * @returns {Promise<boolean>} - Success status
+ */
+export const completeProfileSetup = async (email, profileData) => {
+  try {
+    const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+    const clientsRef = collection(db, "superadmin", superadminId, "clients");
+    const q = query(clientsRef, where("email", "==", email));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return false;
+    }
+    
+    const clientDoc = snapshot.docs[0];
+    await updateDoc(doc(db, "superadmin", superadminId, "clients", clientDoc.id), {
+      name: profileData.name,
+      company_name: profileData.company_name,
+      company_size: profileData.company_size,
+      industry: profileData.industry,
+      phone: profileData.phone,
+      address: profileData.address,
+      is_first_time: true,
+      updated_at: new Date().toISOString()
+    });
+    
+    return true;
+    
+  } catch (error) {
+    console.error('Error completing profile setup:', error);
+    return false;
+  }
+};

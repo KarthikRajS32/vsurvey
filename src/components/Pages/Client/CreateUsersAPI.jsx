@@ -44,47 +44,60 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
     email: "",
   });
 
-  // Get client ID dynamically
+  // Get client ID and superadmin ID dynamically
   const [clientId, setClientId] = useState(null);
+  const [superadminId, setSuperadminId] = useState(null);
 
-  // Function to get client ID from current user
-  const getClientId = async () => {
+  // Function to get client ID using client email
+  const getClientData = async (clientEmail) => {
     try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return null;
+      console.log('Searching for client with email:', clientEmail);
+      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      const clientsRef = collection(db, "superadmin", superadminId, "clients");
+      const q = query(clientsRef, where("email", "==", clientEmail));
+      const clientsSnapshot = await getDocs(q);
+      console.log('Found clients:', clientsSnapshot.docs.length);
       
-      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
-      const snapshot = await getDocs(clientsRef);
+      if (!clientsSnapshot.empty) {
+        const clientDoc = clientsSnapshot.docs[0];
+        console.log('Match found! Client ID:', clientDoc.id, 'Superadmin ID:', superadminId);
+        return { clientId: clientDoc.id, superadminId: superadminId };
+      }
       
-      let clientDocId = null;
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.email === currentUser.email) {
-          clientDocId = doc.id;
-        }
-      });
-      
-      return clientDocId;
+      console.log('No matching client found');
+      return { clientId: null, superadminId: null };
     } catch (error) {
-      console.error("Error getting client ID:", error);
-      return null;
+      console.error("Error getting client data:", error);
+      return { clientId: null, superadminId: null };
     }
   };
 
   useEffect(() => {
-    const initializeClientId = async () => {
+    const initializeClientData = async () => {
       try {
-        const id = await getClientId();
+        // Wait for auth to be ready
+        const currentUser = auth.currentUser;
+        if (!currentUser?.email) {
+          console.log('Auth not ready, retrying in 1 second...');
+          setTimeout(initializeClientData, 1000);
+          return;
+        }
+        
+        console.log('Getting client data for user:', currentUser.email);
+        const { clientId: id, superadminId: superAdminId } = await getClientData(currentUser.email);
+        console.log('Retrieved client data:', { clientId: id, superadminId: superAdminId });
+        
         if (!id) {
           console.warn('Unable to find client ID, but continuing with email-based queries');
         }
         setClientId(id);
+        setSuperadminId(superAdminId);
       } catch (err) {
-        console.error('Failed to get client ID:', err.message);
+        console.error('Failed to get client data:', err.message);
       }
     };
     
-    initializeClientId();
+    initializeClientData();
   }, []);
 
   useEffect(() => {
@@ -179,6 +192,12 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
       await sendPasswordResetEmail(secondaryAuth, formData.email.trim());
       console.log("Password reset email sent");
 
+      // Get fresh client data at time of user creation
+      console.log('Getting fresh client data for user creation...');
+      const { clientId: currentClientId, superadminId: currentSuperadminId } = await getClientData(clientEmail);
+      console.log('Fresh client data:', { clientId: currentClientId, superadminId: currentSuperadminId });
+      console.log('User data will include:', { client_id: currentClientId, superadmin_id: currentSuperadminId });
+      
       // Create user document with Firebase UID as document ID
       const userData = {
         city: "",
@@ -195,7 +214,9 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
         is_profile_complete: false,
         phone: "",
         profile_photo: "",
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        client_id: currentClientId,
+        superadmin_id: currentSuperadminId
       };
 
       console.log('Creating user document with Firebase UID as document ID:', firebaseUID);

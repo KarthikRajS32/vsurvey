@@ -653,13 +653,23 @@ const SuperAdminDashboardAPI = () => {
       const clientsRef = collection(db, "superadmin", superadminId, "clients");
 
       const newClient = {
-        name: formData.name.trim(),
-        email: formData.email.trim(),
+        activatedAt: "",
         clientId: formData.clientId.trim() || `client_${Date.now()}`,
         createdAt: new Date().toISOString(),
-        status: "pending",
-        isActive: false,
+        email: formData.email.trim(),
+      
         firebaseUid: userCredential.user.uid,
+        isActive: false,
+        status: "pending",
+        address: "",
+        company_name: formData.name.trim(),
+        company_size: "",
+        emailVerified: true,
+        industry: "",
+        is_first_time: false,
+        name: "",
+        phone: "",
+        updated_at: new Date().toISOString(),
       };
 
       await addDoc(clientsRef, newClient);
@@ -1017,7 +1027,7 @@ const SuperAdminDashboardAPI = () => {
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <Building className="w-4 h-4 text-gray-500" />
-                              <h3 className="font-semibold">{admin.name}</h3>
+                              <h3 className="font-semibold">{admin.company_name || admin.name}</h3>
                               <span
                                 className={`px-2 py-1 text-xs rounded-full ${
                                   admin.status === "active"
@@ -1216,7 +1226,7 @@ const SuperAdminDashboardAPI = () => {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">{selectedClient.name}</h2>
+                <h2 className="text-2xl font-bold text-gray-900">{selectedClient.company_name || selectedClient.name}</h2>
                 <p className="text-gray-600">{selectedClient.email}</p>
               </div>
               <button
