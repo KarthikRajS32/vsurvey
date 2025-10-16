@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BarChart3, Users, Calendar, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db, auth } from "../../../firebase";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, onSnapshot } from "firebase/firestore";
 
 const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
   const [surveys, setSurveys] = useState([]);
@@ -18,6 +18,7 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
   const [sortConfig, setSortConfig] = useState({});
   const [filters, setFilters] = useState({});
   const [openDropdowns, setOpenDropdowns] = useState({});
+  const [unsubscribers, setUnsubscribers] = useState([]);
 
   const getLocationName = async (lat, lng) => {
     const cacheKey = `${lat},${lng}`;
@@ -67,14 +68,71 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
   };
 
   useEffect(() => {
-    loadSurveys();
+    setupRealTimeListeners();
+    
+    return () => {
+      // Cleanup all listeners on unmount
+      unsubscribers.forEach(unsubscribe => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      });
+    };
   }, []);
 
-  const loadSurveys = async () => {
+  const setupRealTimeListeners = async () => {
     try {
-      setLoading(true);
       const clientId = await getClientId();
       if (!clientId) return;
+
+      // Real-time listener for surveys
+      const surveysRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys");
+      const unsubscribeSurveys = onSnapshot(surveysRef, (snapshot) => {
+        const surveysList = [];
+        snapshot.forEach((doc) => {
+          surveysList.push({
+            id: doc.id,
+            ...doc.data()
+          });
+        });
+        setSurveys(surveysList);
+        
+        // Setup response listeners for each survey
+        surveysList.forEach(survey => {
+          const responseUnsubscriber = setupResponseListener(survey.id, clientId);
+          setUnsubscribers(prev => [...prev, responseUnsubscriber]);
+        });
+      });
+
+      setUnsubscribers(prev => [...prev, unsubscribeSurveys]);
+    } catch (error) {
+      console.error("Error setting up real-time listeners:", error);
+    }
+  };
+
+  const setupResponseListener = (surveyId, clientId) => {
+    const responsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyId, "responses");
+    
+    return onSnapshot(responsesRef, async (snapshot) => {
+      // Update total responses count across all surveys
+      let total = 0;
+      const allSurveys = surveys.length > 0 ? surveys : await loadSurveysOnce();
+      for (const survey of allSurveys) {
+        const surveyResponsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", survey.id, "responses");
+        const surveySnapshot = await getDocs(surveyResponsesRef);
+        total += surveySnapshot.docs.length;
+      }
+      setTotalResponses(total);
+
+      // Always update responses for this survey, regardless of expansion state
+      await loadSurveyResponses(surveyId, clientId);
+    });
+  };
+
+  const loadSurveysOnce = async () => {
+    try {
+      const clientId = await getClientId();
+      if (!clientId) return [];
 
       const surveysRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys");
       const snapshot = await getDocs(surveysRef);
@@ -87,20 +145,105 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
         });
       });
 
-      setSurveys(surveysList);
-
-      // Calculate total responses from all surveys
-      let total = 0;
-      for (const survey of surveysList) {
-        const responsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", survey.id, "response");
-        const responsesSnapshot = await getDocs(responsesRef);
-        total += responsesSnapshot.docs.length;
-      }
-      setTotalResponses(total);
+      return surveysList;
     } catch (error) {
       console.error("Error loading surveys:", error);
-    } finally {
-      setLoading(false);
+      return [];
+    }
+  };
+
+  const loadSurveyResponses = async (surveyId, clientId) => {
+    try {
+      // Get responses and extract question IDs
+      const responsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyId, "responses");
+      const responsesSnapshot = await getDocs(responsesRef);
+      const questionIds = new Set();
+      const questionsData = {};
+      
+      // Extract all question IDs from responses
+      responsesSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.answers) {
+          Object.keys(data.answers).forEach(questionId => {
+            questionIds.add(questionId);
+          });
+        }
+      });
+
+      // Fetch question details
+      for (const questionId of questionIds) {
+        try {
+          const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", questionId);
+          const questionDoc = await getDoc(questionRef);
+          if (questionDoc.exists()) {
+            const questionData = questionDoc.data();
+            questionsData[questionId] = questionData.question_text || questionData.text || questionData.question || `Question ${questionId}`;
+          }
+        } catch (err) {
+          console.error("Error fetching question:", err);
+        }
+      }
+
+      setSurveyQuestions(prev => ({
+        ...prev,
+        [surveyId]: questionsData
+      }));
+
+      const responses = [];
+
+      for (const responseDoc of responsesSnapshot.docs) {
+        const responseData = responseDoc.data();
+
+        // Fetch user name using userId
+        let userName = 'N/A';
+        if (responseData.userId) {
+          try {
+            const userRef = doc(db, "users", responseData.userId);
+            const userDoc = await getDoc(userRef);
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              userName = userData.full_name || userData.name || 'N/A';
+            }
+          } catch (err) {
+            console.error("Error fetching user:", err);
+          }
+        }
+
+        // Format timestamp
+        let formattedDate = 'N/A';
+        if (responseData.submittedAt) {
+          try {
+            if (responseData.submittedAt.toDate) {
+              formattedDate = responseData.submittedAt.toDate().toLocaleString();
+            } else {
+              formattedDate = new Date(responseData.submittedAt).toLocaleString();
+            }
+          } catch (err) {
+            console.error("Error formatting date:", err);
+          }
+        }
+
+        // Convert geoCode to location name
+        let locationName = 'N/A';
+        if (responseData.geoCode && responseData.geoCode._lat && responseData.geoCode._long) {
+          locationName = await getLocationName(responseData.geoCode._lat, responseData.geoCode._long);
+        }
+
+        responses.push({
+          id: responseDoc.id,
+          ...responseData,
+          userName: userName,
+          formattedSubmittedAt: formattedDate,
+          locationName: locationName
+        });
+      }
+
+      setSurveyResponses(prev => ({
+        ...prev,
+        [surveyId]: responses
+      }));
+    } catch (error) {
+      console.error("Error loading survey responses:", error);
     }
   };
 
@@ -110,103 +253,10 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
     } else {
       setExpandedSurvey(surveyId);
 
-      // Load responses for this survey if not already loaded
-      if (!surveyResponses[surveyId]) {
-        try {
-          const clientId = await getClientId();
-          if (!clientId) return;
-
-          // Get responses and extract question IDs
-          const responsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyId, "response");
-          const responsesSnapshot = await getDocs(responsesRef);
-          const questionIds = new Set();
-          const questionsData = {};
-          
-          // Extract all question IDs from responses
-          responsesSnapshot.forEach((doc) => {
-            const data = doc.data();
-            if (data.answers) {
-              Object.keys(data.answers).forEach(questionId => {
-                questionIds.add(questionId);
-              });
-            }
-          });
-
-          // Fetch question details
-          for (const questionId of questionIds) {
-            try {
-              const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", questionId);
-              const questionDoc = await getDoc(questionRef);
-              if (questionDoc.exists()) {
-                const questionData = questionDoc.data();
-                questionsData[questionId] = questionData.question_text || questionData.text || questionData.question || `Question ${questionId}`;
-              }
-            } catch (err) {
-              console.error("Error fetching question:", err);
-            }
-          }
-
-          setSurveyQuestions(prev => ({
-            ...prev,
-            [surveyId]: questionsData
-          }));
-
-          const responses = [];
-
-          for (const responseDoc of responsesSnapshot.docs) {
-            const responseData = responseDoc.data();
-
-            // Fetch user name using userId
-            let userName = 'N/A';
-            if (responseData.userId) {
-              try {
-                const userRef = doc(db, "users", responseData.userId);
-                const userDoc = await getDoc(userRef);
-                if (userDoc.exists()) {
-                  const userData = userDoc.data();
-                  userName = userData.full_name || userData.name || 'N/A';
-                }
-              } catch (err) {
-                console.error("Error fetching user:", err);
-              }
-            }
-
-            // Format timestamp
-            let formattedDate = 'N/A';
-            if (responseData.submittedAt) {
-              try {
-                if (responseData.submittedAt.toDate) {
-                  formattedDate = responseData.submittedAt.toDate().toLocaleString();
-                } else {
-                  formattedDate = new Date(responseData.submittedAt).toLocaleString();
-                }
-              } catch (err) {
-                console.error("Error formatting date:", err);
-              }
-            }
-
-            // Convert geoCode to location name
-            let locationName = 'N/A';
-            if (responseData.geoCode && responseData.geoCode._lat && responseData.geoCode._long) {
-              locationName = await getLocationName(responseData.geoCode._lat, responseData.geoCode._long);
-            }
-
-            responses.push({
-              id: responseDoc.id,
-              ...responseData,
-              userName: userName,
-              formattedSubmittedAt: formattedDate,
-              locationName: locationName
-            });
-          }
-
-          setSurveyResponses(prev => ({
-            ...prev,
-            [surveyId]: responses
-          }));
-        } catch (error) {
-          console.error("Error loading survey responses:", error);
-        }
+      // Load responses for this survey
+      const clientId = await getClientId();
+      if (clientId) {
+        await loadSurveyResponses(surveyId, clientId);
       }
     }
   };
