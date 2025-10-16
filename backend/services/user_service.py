@@ -291,3 +291,43 @@ class UserService:
         updated_data["id"] = updated_doc.id
         
         return User(**updated_data)
+    
+    async def activate_user_on_first_login(self, user_email: str) -> Optional[User]:
+        """Activate user on first mobile login - works with flat users collection"""
+        try:
+            # Query the flat users collection by email
+            users_collection = self.db.collection("users")
+            query = users_collection.where("email", "==", user_email).limit(1)
+            docs = query.get()
+            
+            if not docs:
+                print(f"User not found in flat collection: {user_email}")
+                return None
+            
+            user_doc = docs[0]
+            user_data = user_doc.to_dict()
+            
+            # Only activate if currently pending
+            if user_data.get("status") == "pending":
+                print(f"Activating user: {user_email}")
+                user_doc.reference.update({
+                    "status": "active",
+                    "is_active": True,
+                    "activatedAt": datetime.utcnow(),
+                    "updated_at": datetime.utcnow()
+                })
+                
+                # Get updated data
+                updated_doc = user_doc.reference.get()
+                updated_data = updated_doc.to_dict()
+                updated_data["id"] = updated_doc.id
+                
+                return User(**updated_data)
+            else:
+                print(f"User already active or not pending: {user_email}, status: {user_data.get('status')}")
+                user_data["id"] = user_doc.id
+                return User(**user_data)
+                
+        except Exception as e:
+            print(f"Error activating user on first login: {e}")
+            return None

@@ -175,7 +175,43 @@ import ProfileSetup from "./components/Pages/Client/ProfileSetup";
 import ClientAdminHeader from "./components/Pages/Client/ClientAdminHeader";
 import SetPassword from "./components/Pages/EmailPasswordSet/SetPassword";
 import SurveyResults from "./components/Pages/Client/clientSurveyResult";
-import { auth } from "./firebase";
+import { auth, db } from "./firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+
+// Client status monitoring functions
+let statusListener = null;
+
+const startClientStatusMonitoring = (email, onLogout) => {
+  if (statusListener) {
+    statusListener();
+  }
+  const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+  const clientsRef = collection(db, "superadmin", superadminId, "clients");
+  const q = query(clientsRef, where("email", "==", email));
+  
+  statusListener = onSnapshot(q, (snapshot) => {
+    console.log('Client status check for:', email);
+    if (!snapshot.empty) {
+      const clientData = snapshot.docs[0].data();
+      console.log('Client data:', clientData);
+      
+      if (clientData.isActive === false || clientData.status === "inactive") {
+        console.log('Client deactivated, logging out:', email);
+        auth.signOut();
+        onLogout();
+      }
+    }
+  }, (error) => {
+    console.error('Error monitoring client status:', error);
+  });
+};
+
+const stopClientStatusMonitoring = () => {
+  if (statusListener) {
+    statusListener();
+    statusListener = null;
+  }
+};
 
 function App() {
   const location = useLocation();
@@ -216,12 +252,14 @@ function App() {
     return null;
   });
   const [showProfileEdit, setShowProfileEdit] = useState(false);
+  const [showDeactivationMessage, setShowDeactivationMessage] = useState(false);
 
   // Check if we're on a password setup page
   const isPasswordSetupPage = location.pathname === "/set-password";
 
   const handleLogout = async () => {
     try {
+      stopClientStatusMonitoring();
       await auth.signOut();
     } catch (error) {
       console.error('Error signing out:', error);
@@ -307,6 +345,12 @@ function App() {
         }
 
         console.log("Client user detected, checking profile setup");
+        // Start monitoring client status for auto-logout
+        startClientStatusMonitoring(user.email, () => {
+          setShowDeactivationMessage(true);
+          handleLogout();
+        });
+        
         // Check if profile exists
         const existingProfile = localStorage.getItem(`profile_${user.email}`);
         if (existingProfile) {
@@ -454,8 +498,23 @@ function App() {
           path="/*"
           element={
             !session ? (
-              <Login
-                onLogin={(type, data) => {
+              <>
+                {showDeactivationMessage && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Deactivated</h3>
+                      <p className="text-gray-600 mb-6">Your account has been deactivated. Please contact the administrator.</p>
+                      <button
+                        onClick={() => setShowDeactivationMessage(false)}
+                        className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+                      >
+                        OK
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <Login
+                  onLogin={(type, data) => {
                   setUserType(type);
                   if (type === "client") {
                     // Check if profile exists for first-time detection
@@ -478,8 +537,9 @@ function App() {
                     );
                   }
                   setSession(true);
-                }}
-              />
+                  }}
+                />
+              </>
             ) : userType === "superadmin" ? (
               <SuperAdminDashboard />
             ) : userType === "user" ? (

@@ -149,3 +149,25 @@ async def toggle_user_status(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/activate-on-login", response_model=APIResponse)
+async def activate_user_on_login(
+    current_user_email: str = Depends(get_current_user_email)
+):
+    """Activate user on first mobile login"""
+    try:
+        user_service = UserService()
+        user = await user_service.activate_user_on_first_login(current_user_email)
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return APIResponse(
+            success=True,
+            message="User activated successfully" if user.status == "active" else "User already active",
+            data=user.dict()
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal server error")
