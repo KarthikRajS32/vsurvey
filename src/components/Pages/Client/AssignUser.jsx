@@ -1359,10 +1359,10 @@ const AssignUser = ({
                                 {survey.name}
                               </span>
                               <Button
-                                variant={survey.active ? "destructive" : "default"}
+                                variant={survey.active ? "outline" : "default"}
                                 size="sm"
                                 onClick={() => toggleSurveyStatus(userId, survey.id)}
-                                className="text-xs ml-2 px-2 py-1"
+                                className={`text-xs ml-2 px-2 py-1 ${survey.active ? 'bg-red-100 text-red-600 border-red-200 hover:bg-red-200' : ''}`}
                               >
                                 {survey.active ? "Deactivate" : "Activate"}
                               </Button>
@@ -1457,7 +1457,7 @@ const AssignUser = ({
                         survey.active === false ? 'text-red-400 line-through' : 'text-gray-700'
                       }`}>{survey.name}</span>
                       <Button
-                        variant={survey.active === false ? "default" : "destructive"}
+                        variant={survey.active === false ? "default" : "outline"}
                         size="sm"
                         onClick={() => {
                           setUserAssignments(prev => ({
@@ -1467,7 +1467,7 @@ const AssignUser = ({
                             )
                           }));
                         }}
-                        className="text-xs px-2 py-1"
+                        className={`text-xs px-2 py-1 ${survey.active !== false ? 'bg-red-100 text-red-600 border-red-200 hover:bg-red-200' : ''}`}
                       >
                         {survey.active === false ? "Activate" : "Deactivate"}
                       </Button>

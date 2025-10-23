@@ -487,6 +487,7 @@ import {
   doc,
   updateDoc,
   onSnapshot,
+  setDoc,
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword,
@@ -648,16 +649,15 @@ const SuperAdminDashboardAPI = () => {
       await sendPasswordResetEmail(secondaryAuth, formData.email.trim());
       console.log("Password reset email sent successfully");
 
-      // Create client document
+      // Create client document using Firebase UID as document ID
       const superadminId = "U0UjGVvDJoDbLtWAhyjp";
-      const clientsRef = collection(db, "superadmin", superadminId, "clients");
+      const clientDocRef = doc(db, "superadmin", superadminId, "clients", userCredential.user.uid);
 
       const newClient = {
         activatedAt: "",
         clientId: formData.clientId.trim() || `client_${Date.now()}`,
         createdAt: new Date().toISOString(),
         email: formData.email.trim(),
-      
         firebaseUid: userCredential.user.uid,
         isActive: false,
         status: "pending",
@@ -672,7 +672,7 @@ const SuperAdminDashboardAPI = () => {
         updated_at: new Date().toISOString(),
       };
 
-      await addDoc(clientsRef, newClient);
+      await setDoc(clientDocRef, newClient);
       console.log("Client document created successfully");
 
       setFormData({ name: "", email: "", clientId: "" });
@@ -708,7 +708,7 @@ const SuperAdminDashboardAPI = () => {
   const openEditModal = (e, client) => {
     e.stopPropagation();
     setEditingClient(client);
-    setEditFormData({ name: client.name });
+    setEditFormData({ name: client.company_name || client.name });
     setIsEditModalOpen(true);
   };
 
@@ -724,7 +724,7 @@ const SuperAdminDashboardAPI = () => {
       const superadminId = "U0UjGVvDJoDbLtWAhyjp";
       await updateDoc(
         doc(db, "superadmin", superadminId, "clients", editingClient.id),
-        { name: editFormData.name.trim() }
+        { company_name: editFormData.name.trim() }
       );
       setMessage("Client updated successfully!");
       setTimeout(() => setMessage(""), 3000);
@@ -749,10 +749,51 @@ const SuperAdminDashboardAPI = () => {
 
   const confirmDelete = async () => {
     try {
+      console.log("Deleting client:", clientToDelete.id, "UID:", clientToDelete.firebaseUid);
+      
+      // Use document ID as Firebase UID (since we now use UID as document ID)
+      const firebaseUid = clientToDelete.firebaseUid || clientToDelete.id;
+      
+      // Delete from Firebase Authentication first
+      try {
+        // Re-authenticate as SuperAdmin if needed
+        let user = auth.currentUser;
+        if (!user) {
+          await signInWithEmailAndPassword(auth, "superadmin@vsurvey.com", "superadmin123");
+          user = auth.currentUser;
+        }
+        
+        const token = await user.getIdToken();
+        
+        console.log("Attempting to delete from Firebase Auth with UID:", firebaseUid);
+        const response = await fetch(`http://localhost:8000/api/users/${firebaseUid}/auth`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        const responseText = await response.text();
+        console.log("Firebase Auth deletion response:", response.status, responseText);
+        
+        if (response.ok) {
+          console.log("Client deleted from Firebase Auth successfully");
+        } else {
+          console.error("Failed to delete from Firebase Auth:", responseText);
+        }
+      } catch (authError) {
+        console.error("Error deleting from Firebase Auth:", authError);
+      }
+      
+      // Delete from Firestore
       const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      console.log("Deleting from Firestore with document ID:", clientToDelete.id);
       await deleteDoc(
         doc(db, "superadmin", superadminId, "clients", clientToDelete.id)
       );
+      console.log("Client deleted from Firestore successfully");
+      
       setMessage("Client admin deleted successfully!");
       setTimeout(() => setMessage(""), 3000);
       closeDeleteModal();
@@ -852,11 +893,13 @@ const SuperAdminDashboardAPI = () => {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      window.location.href = '/login';
     } catch (error) {
-      console.error('Logout error:', error);
-      window.location.reload();
+      console.error('Error signing out:', error);
     }
+    localStorage.removeItem("currentSuperAdmin");
+    localStorage.removeItem("currentClientAdmin");
+    localStorage.removeItem("currentUser");
+    window.location.replace('/');
   };
 
   const fetchClientDetails = async (clientId, client = selectedClient) => {
@@ -1221,12 +1264,14 @@ const SuperAdminDashboardAPI = () => {
 
       {/* Client Details Modal */}
       {isClientModalOpen && selectedClient && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">{selectedClient.company_name || selectedClient.name}</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {selectedClient.company_name || selectedClient.name}
+                </h2>
                 <p className="text-gray-600">{selectedClient.email}</p>
               </div>
               <button
@@ -1250,23 +1295,35 @@ const SuperAdminDashboardAPI = () => {
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <div className="flex items-center gap-2">
                         <Users className="w-5 h-5 text-blue-600" />
-                        <span className="font-semibold text-blue-900">Users</span>
+                        <span className="font-semibold text-blue-900">
+                          Users
+                        </span>
                       </div>
-                      <p className="text-2xl font-bold text-blue-600 mt-1">{clientDetails.users.length}</p>
+                      <p className="text-2xl font-bold text-blue-600 mt-1">
+                        {clientDetails.users.length}
+                      </p>
                     </div>
                     <div className="bg-green-50 p-4 rounded-lg">
                       <div className="flex items-center gap-2">
                         <FileText className="w-5 h-5 text-green-600" />
-                        <span className="font-semibold text-green-900">Surveys</span>
+                        <span className="font-semibold text-green-900">
+                          Surveys
+                        </span>
                       </div>
-                      <p className="text-2xl font-bold text-green-600 mt-1">{clientDetails.surveys.length}</p>
+                      <p className="text-2xl font-bold text-green-600 mt-1">
+                        {clientDetails.surveys.length}
+                      </p>
                     </div>
                     <div className="bg-purple-50 p-4 rounded-lg">
                       <div className="flex items-center gap-2">
                         <HelpCircle className="w-5 h-5 text-purple-600" />
-                        <span className="font-semibold text-purple-900">Questions</span>
+                        <span className="font-semibold text-purple-900">
+                          Questions
+                        </span>
                       </div>
-                      <p className="text-2xl font-bold text-purple-600 mt-1">{clientDetails.questions.length}</p>
+                      <p className="text-2xl font-bold text-purple-600 mt-1">
+                        {clientDetails.questions.length}
+                      </p>
                     </div>
                   </div>
 
@@ -1280,23 +1337,37 @@ const SuperAdminDashboardAPI = () => {
                       <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
                         <div className="space-y-2">
                           {clientDetails.users.map((user) => (
-                            <div key={user.id} className="flex items-center justify-between bg-white p-3 rounded border">
+                            <div
+                              key={user.id}
+                              className="flex items-center justify-between bg-white p-3 rounded border"
+                            >
                               <div>
-                                <p className="font-medium">{user.full_name || user.name}</p>
-                                <p className="text-sm text-gray-600">{user.email}</p>
+                                <p className="font-medium">
+                                  {user.full_name || user.name}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {user.email}
+                                </p>
                               </div>
-                              <span className={`px-2 py-1 text-xs rounded-full ${
-                                user.status === 'active' ? 'bg-green-100 text-green-800' :
-                                user.status === 'inactive' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                              }`}>
-                                {user.status || 'pending'}
+                              <span
+                                className={`px-2 py-1 text-xs rounded-full ${
+                                  user.status === "active"
+                                    ? "bg-green-100 text-green-800"
+                                    : user.status === "inactive"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
+                                {user.status || "pending"}
                               </span>
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">No users created yet</p>
+                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">
+                        No users created yet
+                      </p>
                     )}
                   </div>
 
@@ -1310,20 +1381,33 @@ const SuperAdminDashboardAPI = () => {
                       <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
                         <div className="space-y-2">
                           {clientDetails.surveys.map((survey) => (
-                            <div key={survey.id} className="bg-white p-3 rounded border">
+                            <div
+                              key={survey.id}
+                              className="bg-white p-3 rounded border"
+                            >
                               <p className="font-medium">{survey.name}</p>
                               <p className="text-sm text-gray-600">
-                                Questions: {survey.questionCount || survey.questions?.length || 0}
+                                Questions:{" "}
+                                {survey.questionCount ||
+                                  survey.questions?.length ||
+                                  0}
                               </p>
                               <p className="text-sm text-gray-500">
-                                Created: {survey.createdAt ? new Date(survey.createdAt).toLocaleDateString() : 'N/A'}
+                                Created:{" "}
+                                {survey.createdAt
+                                  ? new Date(
+                                      survey.createdAt
+                                    ).toLocaleDateString()
+                                  : "N/A"}
                               </p>
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">No surveys created yet</p>
+                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">
+                        No surveys created yet
+                      </p>
                     )}
                   </div>
 
@@ -1337,20 +1421,30 @@ const SuperAdminDashboardAPI = () => {
                       <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto">
                         <div className="space-y-2">
                           {clientDetails.questions.map((question) => (
-                            <div key={question.id} className="bg-white p-3 rounded border">
+                            <div
+                              key={question.id}
+                              className="bg-white p-3 rounded border"
+                            >
                               <p className="font-medium">{question.text}</p>
                               <div className="flex items-center gap-4 mt-1">
-                                <span className="text-sm text-gray-600">Type: {question.type}</span>
-                                {question.options && question.options.length > 0 && (
-                                  <span className="text-sm text-gray-600">Options: {question.options.length}</span>
-                                )}
+                                <span className="text-sm text-gray-600">
+                                  Type: {question.type}
+                                </span>
+                                {question.options &&
+                                  question.options.length > 0 && (
+                                    <span className="text-sm text-gray-600">
+                                      Options: {question.options.length}
+                                    </span>
+                                  )}
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">No questions created yet</p>
+                      <p className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">
+                        No questions created yet
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1369,11 +1463,14 @@ const SuperAdminDashboardAPI = () => {
 
       {/* Edit Client Modal */}
       {isEditModalOpen && editingClient && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full">
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-xl font-bold text-gray-900">Edit Client</h2>
-              <button onClick={closeEditModal} className="text-gray-400 hover:text-gray-600">
+              <button
+                onClick={closeEditModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -1419,7 +1516,11 @@ const SuperAdminDashboardAPI = () => {
                 />
               </div>
               <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={closeEditModal}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeEditModal}
+                >
                   Cancel
                 </Button>
                 <Button type="submit">Update Client</Button>
@@ -1431,24 +1532,38 @@ const SuperAdminDashboardAPI = () => {
 
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && clientToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full">
             <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-xl font-bold text-gray-900">Confirm Delete</h2>
-              <button onClick={closeDeleteModal} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-xl font-bold text-gray-900">
+                Confirm Delete
+              </h2>
+              <button
+                onClick={closeDeleteModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
             <div className="p-6">
               <p className="text-gray-600 mb-4">
-                Are you sure you want to delete <strong>{clientToDelete.name}</strong>?
-                This action cannot be undone.
+                Are you sure you want to delete{" "}
+                <strong>{clientToDelete.name}</strong>? This action cannot be
+                undone.
               </p>
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={closeDeleteModal}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeDeleteModal}
+                >
                   Cancel
                 </Button>
-                <Button type="button" variant="destructive" onClick={confirmDelete}>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={confirmDelete}
+                >
                   Delete
                 </Button>
               </div>
