@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarChart3, Users, ChevronDown, ChevronUp, Building } from "lucide-react";
 import { db } from "../../../firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 
 const SurveyResults = () => {
   const [clients, setClients] = useState([]);
@@ -34,10 +34,13 @@ const SurveyResults = () => {
         const surveysSnapshot = await getDocs(surveysRef);
         const clientSurveysCount = surveysSnapshot.size;
         
-        // Get actual responses count for this client
-        const responsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", doc.id, "survey_responses");
-        const responsesSnapshot = await getDocs(responsesRef);
-        const clientResponsesCount = responsesSnapshot.size;
+        // Get actual responses count for this client by counting all survey responses
+        let clientResponsesCount = 0;
+        for (const surveyDoc of surveysSnapshot.docs) {
+          const surveyResponsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", doc.id, "surveys", surveyDoc.id, "responses");
+          const surveyResponsesSnapshot = await getDocs(surveyResponsesRef);
+          clientResponsesCount += surveyResponsesSnapshot.size;
+        }
         
         surveysCount += clientSurveysCount;
         responsesCount += clientResponsesCount;
@@ -78,16 +81,9 @@ const SurveyResults = () => {
             const surveyData = surveyDoc.data();
             
             // Get actual response count for this survey
-            const surveyResponsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_responses");
+            const surveyResponsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyDoc.id, "responses");
             const surveyResponsesSnapshot = await getDocs(surveyResponsesRef);
-            
-            let surveyResponseCount = 0;
-            surveyResponsesSnapshot.forEach((responseDoc) => {
-              const responseData = responseDoc.data();
-              if (responseData.surveyId === surveyDoc.id) {
-                surveyResponseCount++;
-              }
-            });
+            const surveyResponseCount = surveyResponsesSnapshot.size;
             
             surveys.push({
               id: surveyDoc.id,

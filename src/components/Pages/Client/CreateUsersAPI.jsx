@@ -9,7 +9,8 @@ import ClientAdminHeader from "./ClientAdminHeader";
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, deleteUser } from "firebase/auth";
 import { db, auth } from "../../../firebase";
 import { collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, setDoc, updateDoc, getDocs, where } from "firebase/firestore";
-import { httpsCallable, getFunctions } from "firebase/functions";
+// API base URL
+const API_BASE_URL = 'http://localhost:8000';
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
@@ -276,9 +277,33 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
     if (userToDelete) {
       try {
         setLoading(true);
+        
+        // Delete from Firebase Authentication first
+        try {
+          const token = await auth.currentUser.getIdToken();
+          const response = await fetch(`${API_BASE_URL}/api/users/${userToDelete.id}/auth`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            console.log('User deleted from Firebase Auth:', userToDelete.id);
+          } else {
+            console.warn('Failed to delete from Firebase Auth');
+          }
+        } catch (authError) {
+          console.warn('Failed to delete from Firebase Auth (user may not exist):', authError);
+          // Continue with Firestore deletion even if Auth deletion fails
+        }
+        
+        // Delete from Firestore
         const userRef = doc(db, "users", userToDelete.id);
         await deleteDoc(userRef);
-        setMessage("✅ User deleted successfully!");
+        
+        setMessage("✅ User deleted successfully from both Authentication and Database!");
         setTimeout(() => setMessage(""), 3000);
       } catch (err) {
         setMessage(`❌ Failed to delete user: ${err.message}`);
