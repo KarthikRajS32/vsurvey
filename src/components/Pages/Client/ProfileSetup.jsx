@@ -7,6 +7,50 @@ import { completeProfileSetup } from "../../../services/clientStatusService";
 import { db } from '../../../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
+const countryCodes = [
+  { code: "+1", flag: "🇺🇸", name: "United States" },
+  { code: "+44", flag: "🇬🇧", name: "United Kingdom" },
+  { code: "+91", flag: "🇮🇳", name: "India" },
+  { code: "+86", flag: "🇨🇳", name: "China" },
+  { code: "+81", flag: "🇯🇵", name: "Japan" },
+  { code: "+49", flag: "🇩🇪", name: "Germany" },
+  { code: "+33", flag: "🇫🇷", name: "France" },
+  { code: "+39", flag: "🇮🇹", name: "Italy" },
+  { code: "+34", flag: "🇪🇸", name: "Spain" },
+  { code: "+7", flag: "🇷🇺", name: "Russia" },
+  { code: "+55", flag: "🇧🇷", name: "Brazil" },
+  { code: "+61", flag: "🇦🇺", name: "Australia" },
+  { code: "+82", flag: "🇰🇷", name: "South Korea" },
+  { code: "+52", flag: "🇲🇽", name: "Mexico" },
+  { code: "+31", flag: "🇳🇱", name: "Netherlands" },
+  { code: "+46", flag: "🇸🇪", name: "Sweden" },
+  { code: "+47", flag: "🇳🇴", name: "Norway" },
+  { code: "+45", flag: "🇩🇰", name: "Denmark" },
+  { code: "+358", flag: "🇫🇮", name: "Finland" },
+  { code: "+41", flag: "🇨🇭", name: "Switzerland" },
+  { code: "+43", flag: "🇦🇹", name: "Austria" },
+  { code: "+32", flag: "🇧🇪", name: "Belgium" },
+  { code: "+351", flag: "🇵🇹", name: "Portugal" },
+  { code: "+30", flag: "🇬🇷", name: "Greece" },
+  { code: "+48", flag: "🇵🇱", name: "Poland" },
+  { code: "+420", flag: "🇨🇿", name: "Czech Republic" },
+  { code: "+36", flag: "🇭🇺", name: "Hungary" },
+  { code: "+40", flag: "🇷🇴", name: "Romania" },
+  { code: "+60", flag: "🇲🇾", name: "Malaysia" },
+  { code: "+65", flag: "🇸🇬", name: "Singapore" },
+  { code: "+66", flag: "🇹🇭", name: "Thailand" },
+  { code: "+84", flag: "🇻🇳", name: "Vietnam" },
+  { code: "+63", flag: "🇵🇭", name: "Philippines" },
+  { code: "+62", flag: "🇮🇩", name: "Indonesia" },
+  { code: "+94", flag: "🇱🇰", name: "Sri Lanka" },
+  { code: "+880", flag: "🇧🇩", name: "Bangladesh" },
+  { code: "+92", flag: "🇵🇰", name: "Pakistan" },
+  { code: "+20", flag: "🇪🇬", name: "Egypt" },
+  { code: "+27", flag: "🇿🇦", name: "South Africa" },
+  { code: "+234", flag: "🇳🇬", name: "Nigeria" },
+  { code: "+254", flag: "🇰🇪", name: "Kenya" },
+];
+
 const ProfileSetup = ({
   email,
   onComplete,
@@ -21,11 +65,26 @@ const ProfileSetup = ({
     company_name: existingProfile?.company_name || "",
     company_size: existingProfile?.company_size || "",
     industry: existingProfile?.industry || "",
+    countryCode: existingProfile?.countryCode || "+1",
     phone: existingProfile?.phone || "",
     address: existingProfile?.address || "",
   });
   const [message, setMessage] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
   const fileInputRef = useRef(null);
+  
+  const filteredCountries = countryCodes.filter(country =>
+    country.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    country.code.includes(searchTerm)
+  ).sort((a, b) => {
+    // Prioritize codes that start with the search term
+    const aStartsWithSearch = a.code.startsWith(searchTerm);
+    const bStartsWithSearch = b.code.startsWith(searchTerm);
+    if (aStartsWithSearch && !bStartsWithSearch) return -1;
+    if (!aStartsWithSearch && bStartsWithSearch) return 1;
+    return 0;
+  });
 
   useEffect(() => {
     const fetchClientData = async () => {
@@ -39,7 +98,14 @@ const ProfileSetup = ({
           const clientData = snapshot.docs[0].data();
           setFormData(prev => ({
             ...prev,
-            company_name: clientData.company_name || ""
+            profileImage: clientData.profileImage || prev.profileImage,
+            name: clientData.name || prev.name,
+            company_name: clientData.company_name || prev.company_name,
+            company_size: clientData.company_size || prev.company_size,
+            industry: clientData.industry || prev.industry,
+            countryCode: clientData.countryCode || prev.countryCode,
+            phone: clientData.phone || prev.phone,
+            address: clientData.address || prev.address
           }));
         }
       } catch (error) {
@@ -47,10 +113,8 @@ const ProfileSetup = ({
       }
     };
 
-    if (!isEdit) {
-      fetchClientData();
-    }
-  }, [email, isEdit]);
+    fetchClientData();
+  }, [email]);
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -75,7 +139,7 @@ const ProfileSetup = ({
       return;
     }
 
-    // Save profile to localStorage
+    // Save profile data to Firestore
     const profileData = {
       profileImage: formData.profileImage,
       name: formData.name.trim(),
@@ -83,17 +147,13 @@ const ProfileSetup = ({
       company_name: formData.company_name.trim(),
       company_size: formData.company_size.trim(),
       industry: formData.industry.trim(),
+      countryCode: formData.countryCode,
       phone: formData.phone.trim(),
       address: formData.address.trim(),
       setupComplete: true,
     };
 
-    localStorage.setItem(`profile_${email}`, JSON.stringify(profileData));
-
-    // Save profile data to Firestore
-    if (!isEdit) {
-      await completeProfileSetup(email, profileData);
-    }
+    await completeProfileSetup(email, profileData);
 
     if (!isEdit && setActiveTab) {
       setActiveTab("Users");
@@ -194,15 +254,19 @@ const ProfileSetup = ({
               <label className="block text-sm font-bold text-black mb-2">
                 COMPANY SIZE
               </label>
-              <Input
-                type="text"
+              <select
                 value={formData.company_size}
                 onChange={(e) =>
                   setFormData({ ...formData, company_size: e.target.value })
                 }
-                placeholder="Enter company size"
-                className="rounded-[5px] border-gray-400 p-3 text-sm w-full"
-              />
+                className="rounded-[5px] border-gray-400 p-3 text-sm w-full border bg-white"
+              >
+                <option value="">Select company size</option>
+                <option value="1-100">1-100</option>
+                <option value="100-1000">100-1000</option>
+                <option value="1000-10000">1000-10000</option>
+                <option value="10000+">10000+</option>
+              </select>
             </div>
 
             <div>
@@ -224,16 +288,61 @@ const ProfileSetup = ({
               <label className="block text-sm font-bold text-black mb-2">
                 PHONE
               </label>
-              <Input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) =>
-                  setFormData({ ...formData, phone: e.target.value })
-                }
-                placeholder="Enter phone number"
-                required
-                className="rounded-[5px] border-gray-400 p-3 text-sm w-full"
-              />
+              <div className="flex relative">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={showDropdown ? searchTerm : (countryCodes.find(c => c.code === formData.countryCode)?.flag + " " + formData.countryCode)}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setShowDropdown(true);
+                    }}
+                    onFocus={() => {
+                      setSearchTerm("");
+                      setShowDropdown(true);
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => setShowDropdown(false), 200);
+                    }}
+                    placeholder="Search country code"
+                    className="rounded-l-[5px] border-gray-400 border border-r-0 p-3 text-sm bg-white w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {showDropdown && (
+                    <div className="absolute top-full left-0 w-80 bg-white border border-gray-400 rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
+                      {filteredCountries.length > 0 ? (
+                        filteredCountries.map((country) => (
+                          <div
+                            key={country.code}
+                            onClick={() => {
+                              setFormData({ ...formData, countryCode: country.code });
+                              setSearchTerm("");
+                              setShowDropdown(false);
+                            }}
+                            className="flex items-center p-2 hover:bg-gray-100 cursor-pointer text-sm border-b border-gray-100 last:border-b-0"
+                          >
+                            <span className="mr-2 text-lg">{country.flag}</span>
+                            <span className="mr-2 font-medium">{country.code}</span>
+                            <span className="text-gray-600">{country.name}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-2 text-sm text-gray-500">No countries found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                  placeholder="Enter phone number"
+                  required
+                  className="rounded-r-[5px] border-gray-400 border p-3 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
 
             <div>

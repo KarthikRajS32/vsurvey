@@ -24,30 +24,8 @@ const Login = ({ onLogin }) => {
         return
       }
 
-      // Check if client admin exists and their status BEFORE Firebase authentication
-      console.log('DEBUG: Checking if client admin exists:', email)
+      // Check if client admin exists
       const clientExists = await clientAdminExists(email)
-      console.log('DEBUG: Client admin exists:', clientExists)
-      
-      if (clientExists) {
-        // Check client status before allowing authentication
-        console.log('DEBUG: Checking if client admin is pending:', email)
-        const isPending = await isClientAdminPending(email)
-        console.log('DEBUG: Client admin is pending:', isPending)
-        
-        if (!isPending) {
-          // Check if client is active before allowing login
-          console.log('DEBUG: Checking if client admin is active:', email)
-          const isActive = await isClientAdminActive(email)
-          console.log('DEBUG: Client admin is active:', isActive)
-          
-          if (!isActive) {
-            console.log('❌ Client admin is inactive, login denied:', email)
-            alert('Your account has been deactivated. Please contact the administrator.')
-            return
-          }
-        }
-      }
 
       // Use Firebase authentication for client admins
       const result = await authService.signIn(email, password)
@@ -118,7 +96,7 @@ const Login = ({ onLogin }) => {
         setTimeout(async () => {
           // Determine user type based on database presence
           if (clientExists) {
-            // Check if profile setup is needed
+            // Check if profile setup is needed using Firebase data
             const profileSetupNeeded = await needsProfileSetup(email)
             onLogin('client', { 
               email, 

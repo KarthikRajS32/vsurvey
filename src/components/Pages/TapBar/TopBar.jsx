@@ -179,9 +179,11 @@ const TopBar = ({
                   <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 )}
               </div>
-              <span className="hidden sm:inline text-gray-700 font-medium text-sm">
-                {isSuperAdmin ? "Super Admin" : profile?.name || "User"}
-              </span>
+              {(isSuperAdmin || profile?.name) && (
+                <span className="hidden sm:inline text-gray-700 font-medium text-sm">
+                  {isSuperAdmin ? "Super Admin" : profile?.name}
+                </span>
+              )}
               <IoIosArrowDown className="text-base" />
             </button>
             {isProfileDropdownOpen && (

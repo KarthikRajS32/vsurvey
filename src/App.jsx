@@ -176,7 +176,7 @@ import ClientAdminHeader from "./components/Pages/Client/ClientAdminHeader";
 import SetPassword from "./components/Pages/EmailPasswordSet/SetPassword";
 import SurveyResults from "./components/Pages/Client/clientSurveyResult";
 import { auth, db } from "./firebase";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 
 // Client status monitoring functions
 let statusListener = null;
@@ -191,11 +191,18 @@ const startClientStatusMonitoring = (email, onLogout) => {
   
   statusListener = onSnapshot(q, (snapshot) => {
     console.log('Client status check for:', email);
-    if (!snapshot.empty) {
+    if (snapshot.empty) {
+      // Client document no longer exists - client was deleted
+      console.log('Client deleted, logging out:', email);
+      auth.signOut();
+      onLogout();
+    } else {
       const clientData = snapshot.docs[0].data();
       console.log('Client data:', clientData);
       
-      if (clientData.isActive === false || clientData.status === "inactive") {
+      // Only show deactivation for clients who were previously active but are now inactive
+      // Don't show for pending clients (new clients setting up profile)
+      if (clientData.status === "inactive" && clientData.status !== "pending") {
         console.log('Client deactivated, logging out:', email);
         auth.signOut();
         onLogout();
@@ -235,22 +242,9 @@ function App() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [clientAdminData, setClientAdminData] = useState(() => {
-    const savedUser = localStorage.getItem("currentClientAdmin");
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      const profile = localStorage.getItem(`profile_${user.email}`);
-      if (profile) {
-        const profileData = JSON.parse(profile);
-        return {
-          email: user.email,
-          profile: profileData,
-          isFirstTime: false,
-        };
-      }
-    }
-    return null;
-  });
+  const [clientAdminData, setClientAdminData] = useState(null);
+  const [profileCache, setProfileCache] = useState(null);
+  const [isCheckingProfile, setIsCheckingProfile] = useState(false);
   const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [showDeactivationMessage, setShowDeactivationMessage] = useState(false);
 
@@ -275,11 +269,12 @@ function App() {
   };
 
   const handleProfileComplete = (profileData) => {
-    setClientAdminData({
-      ...clientAdminData,
+    setClientAdminData(prev => ({
+      ...prev,
       profile: profileData,
       isFirstTime: false,
-    });
+    }));
+    setProfileCache(profileData);
     setShowProfileEdit(false);
   };
 
@@ -351,23 +346,53 @@ function App() {
           handleLogout();
         });
         
-        // Check if profile exists
-        const existingProfile = localStorage.getItem(`profile_${user.email}`);
-        if (existingProfile) {
-          const profileData = JSON.parse(existingProfile);
-          setClientAdminData({
-            email: user.email,
-            isFirstTime: false,
-            profile: profileData,
-          });
-        } else {
-          // First time login - show profile setup
-          setClientAdminData({
-            email: user.email,
-            isFirstTime: true,
-            profile: null,
-          });
-        }
+        // Check Firebase for profile setup status
+        const checkProfileSetup = async () => {
+          setIsCheckingProfile(true);
+          try {
+            const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+            const clientsRef = collection(db, "superadmin", superadminId, "clients");
+            const q = query(clientsRef, where("email", "==", user.email));
+            const snapshot = await getDocs(q);
+            
+            if (!snapshot.empty) {
+              const clientData = snapshot.docs[0].data();
+              // is_first_time: false = needs setup, true = setup complete, undefined = needs setup
+              const needsSetup = clientData.is_first_time !== true;
+              
+              console.log('Profile setup check:', { is_first_time: clientData.is_first_time, needsSetup });
+              console.log('Client data from Firebase:', clientData);
+              // Cache the profile data
+              setProfileCache(clientData);
+              setClientAdminData(prev => {
+                // Preserve existing profile if it exists and clientData is complete
+                const profileToUse = clientData;
+                return {
+                  email: user.email,
+                  isFirstTime: needsSetup,
+                  profile: profileToUse,
+                };
+              });
+            } else {
+              setClientAdminData({
+                email: user.email,
+                isFirstTime: true,
+                profile: null,
+              });
+            }
+          } catch (error) {
+            console.error('Error checking profile setup:', error);
+            setClientAdminData({
+              email: user.email,
+              isFirstTime: true,
+              profile: null,
+            });
+          } finally {
+            setIsCheckingProfile(false);
+          }
+        };
+        
+        checkProfileSetup();
         setUserType("client");
         setSession(true);
       } else if (!session) {
@@ -396,11 +421,12 @@ function App() {
   }, []);
 
   const renderContent = () => {
+    const profileData = clientAdminData?.profile || profileCache;
     switch (activeTab) {
       case "Users":
         return (
           <SurveyPersonnel
-            profile={clientAdminData?.profile}
+            profile={profileData}
             onProfileEdit={handleProfileEdit}
             onLogout={handleLogout}
             onNavigateToSurveys={handleNavigateToSurveys}
@@ -409,7 +435,7 @@ function App() {
       case "Questions":
         return (
           <Surveys
-            profile={clientAdminData?.profile}
+            profile={profileData}
             onProfileEdit={handleProfileEdit}
             onLogout={handleLogout}
             onNavigateToSurveys={handleNavigateToSurveys}
@@ -418,7 +444,7 @@ function App() {
       case "surveys":
         return (
           <CreateSurvey
-            profile={clientAdminData?.profile}
+            profile={profileData}
             onProfileEdit={handleProfileEdit}
             onLogout={handleLogout}
           />
@@ -426,7 +452,7 @@ function App() {
       case "assignuser":
         return (
           <AssignUser
-            profile={clientAdminData?.profile}
+            profile={profileData}
             onProfileEdit={handleProfileEdit}
             onLogout={handleLogout}
             onNavigateToSurveys={handleNavigateToSurveys}
@@ -435,7 +461,7 @@ function App() {
       case "results":
         return (
           <SurveyResults
-            profile={clientAdminData?.profile}
+            profile={profileData}
             onProfileEdit={handleProfileEdit}
             onLogout={handleLogout}
           />
@@ -443,7 +469,7 @@ function App() {
       default:
         return (
           <SurveyPersonnel
-            profile={clientAdminData?.profile}
+            profile={profileData}
             onProfileEdit={handleProfileEdit}
             onLogout={handleLogout}
             onNavigateToSurveys={handleNavigateToSurveys}
@@ -517,14 +543,7 @@ function App() {
                   onLogin={(type, data) => {
                   setUserType(type);
                   if (type === "client") {
-                    // Check if profile exists for first-time detection
-                    const existingProfile = localStorage.getItem(`profile_${data.email}`);
-                    const clientData = {
-                      ...data,
-                      isFirstTime: !existingProfile,
-                      profile: existingProfile ? JSON.parse(existingProfile) : null
-                    };
-                    setClientAdminData(clientData);
+                    setClientAdminData(data);
                     localStorage.setItem(
                       "currentClientAdmin",
                       JSON.stringify({ email: data.email })
@@ -556,7 +575,14 @@ function App() {
                   </button>
                 </div>
               </div>
-            ) : clientAdminData?.isFirstTime || showProfileEdit ? (
+            ) : isCheckingProfile ? (
+              <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading...</p>
+                </div>
+              </div>
+            ) : clientAdminData && (clientAdminData.isFirstTime === true || showProfileEdit) ? (
               <ProfileSetup
                 email={clientAdminData.email}
                 onComplete={handleProfileComplete}
@@ -572,7 +598,7 @@ function App() {
                   onProfileEdit={handleProfileEdit}
                   isMobileMenuOpen={isMobileMenuOpen}
                   setIsMobileMenuOpen={setIsMobileMenuOpen}
-                  profile={clientAdminData?.profile}
+                  profile={profileCache || clientAdminData?.profile}
                 />
                 <Sidebar
                   activeTab={activeTab}

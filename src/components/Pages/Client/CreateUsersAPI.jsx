@@ -210,7 +210,7 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
         full_name: formData.full_name.trim(),
         gender: "",
         id: firebaseUID,
-        is_active: false,
+        is_active: true,
         status: "pending",
         is_profile_complete: false,
         phone: "",
