@@ -360,12 +360,30 @@ const ProfileSetup = ({
               />
             </div>
 
-            <Button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 p-4 text-sm"
-            >
-              {isEdit ? "Update Profile" : "Complete Setup"}
-            </Button>
+            {isEdit ? (
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  onClick={() => onComplete(existingProfile)}
+                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white p-4 text-sm"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1 bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 p-4 text-sm"
+                >
+                  Update Profile
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700 p-4 text-sm"
+              >
+                Complete Setup
+              </Button>
+            )}
           </form>
           {message && <p className="mt-4 text-sm text-red-600">{message}</p>}
         </CardContent>
