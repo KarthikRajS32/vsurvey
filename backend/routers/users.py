@@ -113,14 +113,31 @@ async def delete_user(
     """Delete a user"""
     try:
         user_service = UserService()
-        success = await user_service.delete_user(user_id, current_user_email)
+        result = await user_service.delete_user_completely(user_id, current_user_email)
         
-        if not success:
-            raise HTTPException(status_code=404, detail="User not found")
+        if not result.get("success", False) and not result["firestore_deleted"] and not result["firebase_auth_deleted"]:
+            raise HTTPException(status_code=404, detail="User not found or could not be deleted")
+        
+        # Build success message
+        deleted_from = []
+        if result["firestore_deleted"]:
+            deleted_from.append("database")
+        if result["firebase_auth_deleted"]:
+            deleted_from.append("authentication")
+        
+        message = f"User deleted from: {', '.join(deleted_from)}" if deleted_from else "User deletion completed"
         
         return APIResponse(
             success=True,
-            message="User deleted successfully"
+            message=message,
+            data={
+                "user_id": user_id,
+                "deleted_from": {
+                    "firestore": result["firestore_deleted"],
+                    "firebase_auth": result["firebase_auth_deleted"]
+                },
+                "warnings": result["errors"] if result["errors"] else None
+            }
         )
     except HTTPException:
         raise

@@ -58,6 +58,7 @@ const ProfileSetup = ({
   existingProfile = null,
   setActiveTab,
 }) => {
+  const [originalData, setOriginalData] = useState(null);
   const [formData, setFormData] = useState({
     profileImage: existingProfile?.profileImage || null,
     name: existingProfile?.name || "",
@@ -96,17 +97,19 @@ const ProfileSetup = ({
         
         if (!snapshot.empty) {
           const clientData = snapshot.docs[0].data();
-          setFormData(prev => ({
-            ...prev,
-            profileImage: clientData.profileImage || prev.profileImage,
-            name: clientData.name || prev.name,
-            company_name: clientData.company_name || prev.company_name,
-            company_size: clientData.company_size || prev.company_size,
-            industry: clientData.industry || prev.industry,
-            countryCode: clientData.countryCode || prev.countryCode,
-            phone: clientData.phone || prev.phone,
-            address: clientData.address || prev.address
-          }));
+          const firebaseData = {
+            profileImage: clientData.profileImage || existingProfile?.profileImage || null,
+            name: clientData.name || existingProfile?.name || "",
+            email: email,
+            company_name: clientData.company_name || existingProfile?.company_name || "",
+            company_size: clientData.company_size || existingProfile?.company_size || "",
+            industry: clientData.industry || existingProfile?.industry || "",
+            countryCode: clientData.countryCode || existingProfile?.countryCode || "+1",
+            phone: clientData.phone || existingProfile?.phone || "",
+            address: clientData.address || existingProfile?.address || "",
+          };
+          setOriginalData(firebaseData);
+          setFormData(firebaseData);
         }
       } catch (error) {
         console.error('Error fetching client data:', error);
@@ -364,7 +367,7 @@ const ProfileSetup = ({
               <div className="flex gap-3">
                 <Button
                   type="button"
-                  onClick={() => onComplete(existingProfile)}
+                  onClick={() => onComplete(originalData || existingProfile)}
                   className="flex-1 bg-gray-500 hover:bg-gray-600 text-white p-4 text-sm"
                 >
                   Cancel

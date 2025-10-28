@@ -601,10 +601,14 @@ const CreateQuestionAPI = ({
         updatedAt: new Date().toISOString(),
       };
 
+      // Handle rating scale - add if rating type, remove if not
       if (editFormData.type === "rating") {
         updateData.ratingScale = editFormData.ratingScale || '1-5';
+      } else if (editingQuestion.ratingScale) {
+        // Use Firebase's deleteField() to completely remove the field
+        const { deleteField } = await import('firebase/firestore');
+        updateData.ratingScale = deleteField();
       }
-
       await updateDoc(questionRef, updateData);
 
       // Also update backend API

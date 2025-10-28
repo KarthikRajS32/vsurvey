@@ -5,6 +5,7 @@ import uuid
 from models.schemas import User, UserCreate, UserUpdate, PaginatedResponse
 from models.database import get_db, COLLECTIONS
 from google.cloud.firestore_v1 import FieldFilter
+from firebase_admin import auth
 
 class UserService:
     def __init__(self):
@@ -224,7 +225,7 @@ class UserService:
         return User(**updated_data)
 
     async def delete_user(self, user_id: str, created_by: str) -> bool:
-        """Delete user"""
+        """Delete user from both Firestore and Firebase Auth"""
         collection = await self.get_client_users_collection(created_by)
         doc_ref = collection.document(user_id)
         doc = doc_ref.get()
@@ -238,10 +239,101 @@ class UserService:
         if user_data.get("created_by") != created_by:
             return False
         
-        # Delete document
+        # Delete from Firebase Auth first
+        try:
+            from models.database import get_firebase_auth
+            auth_client = get_firebase_auth()
+            
+            # Try to find user by email in Firebase Auth
+            try:
+                user_record = auth_client.get_user_by_email(user_data["email"])
+                auth_client.delete_user(user_record.uid)
+                print(f"Successfully deleted user from Firebase Auth: {user_data['email']}")
+            except auth_client.UserNotFoundError:
+                print(f"User not found in Firebase Auth: {user_data['email']}")
+            except Exception as auth_error:
+                print(f"Error deleting from Firebase Auth: {str(auth_error)}")
+                # Continue with Firestore deletion even if Auth deletion fails
+        except Exception as e:
+            print(f"Firebase Auth deletion error: {str(e)}")
+        
+        # Delete from Firestore
         doc_ref.delete()
         
         return True
+
+    async def delete_user_completely(self, user_id: str, created_by: str) -> dict:
+        """Delete user completely from both Firebase Auth and Firestore with detailed results"""
+        result = {
+            "user_id": user_id,
+            "firestore_deleted": False,
+            "firebase_auth_deleted": False,
+            "errors": [],
+            "user_email": None
+        }
+        
+        try:
+            collection = await self.get_client_users_collection(created_by)
+            doc_ref = collection.document(user_id)
+            doc = doc_ref.get()
+            
+            if not doc.exists:
+                result["errors"].append("User not found in Firestore")
+                return result
+            
+            user_data = doc.to_dict()
+            result["user_email"] = user_data.get("email")
+            
+            # Check if user belongs to the current client admin
+            if user_data.get("created_by") != created_by:
+                result["errors"].append("User does not belong to current admin")
+                return result
+            
+            # Delete from Firebase Auth
+            try:
+                from models.database import get_firebase_auth
+                auth_client = get_firebase_auth()
+                
+                try:
+                    # Find user by email
+                    user_record = auth_client.get_user_by_email(user_data["email"])
+                    # Delete user
+                    auth_client.delete_user(user_record.uid)
+                    result["firebase_auth_deleted"] = True
+                    print(f"Successfully deleted user from Firebase Auth: {user_data['email']}")
+                except auth.UserNotFoundError:
+                    result["errors"].append("User not found in Firebase Authentication")
+                    print(f"User not found in Firebase Auth: {user_data['email']}")
+                except Exception as auth_error:
+                    error_msg = f"Firebase Auth deletion failed: {str(auth_error)}"
+                    result["errors"].append(error_msg)
+                    print(error_msg)
+            except Exception as e:
+                error_msg = f"Firebase Auth service error: {str(e)}"
+                result["errors"].append(error_msg)
+                print(error_msg)
+            
+            # Delete from Firestore
+            try:
+                doc_ref.delete()
+                result["firestore_deleted"] = True
+                print(f"Successfully deleted user from Firestore: {user_data['email']}")
+            except Exception as firestore_error:
+                error_msg = f"Firestore deletion failed: {str(firestore_error)}"
+                result["errors"].append(error_msg)
+                print(error_msg)
+            
+            # Determine overall success
+            result["success"] = result["firestore_deleted"] or result["firebase_auth_deleted"]
+            
+            return result
+            
+        except Exception as e:
+            error_msg = f"Unexpected error in complete deletion: {str(e)}"
+            result["errors"].append(error_msg)
+            print(error_msg)
+            result["success"] = False
+            return result
 
     async def toggle_user_status(self, user_id: str, created_by: str) -> Optional[User]:
         """Toggle user active status"""
