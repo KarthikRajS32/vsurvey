@@ -15,12 +15,29 @@ def init_firebase():
         firebase_admin.delete_app(app)
     firebase_admin._apps.clear()
     
-    # Use service account key file
-    if os.path.exists("serviceAccountKey.json"):
+    # Try environment variables first (for production)
+    if all([
+        os.getenv("FIREBASE_PROJECT_ID"),
+        os.getenv("FIREBASE_PRIVATE_KEY"),
+        os.getenv("FIREBASE_CLIENT_EMAIL")
+    ]):
+        cred_dict = {
+            "type": "service_account",
+            "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+            "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n'),
+            "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+            "client_id": "",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token"
+        }
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+    # Fallback to service account key file (for local development)
+    elif os.path.exists("serviceAccountKey.json"):
         cred = credentials.Certificate("serviceAccountKey.json")
         firebase_admin.initialize_app(cred)
     else:
-        raise FileNotFoundError("serviceAccountKey.json not found")
+        raise FileNotFoundError("Firebase credentials not found. Set environment variables or provide serviceAccountKey.json")
     
     db = firestore.client()
     return db
