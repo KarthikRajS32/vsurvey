@@ -1,7 +1,10 @@
 fastapi==0.68.0
-uvicorn==0.15.0
+uvicorn[standard]==0.15.0
 pydantic==1.10.12
-firebase-admin==5.4.0
+firebase-admin==6.2.0
 google-cloud-firestore==2.7.2
 python-multipart==0.0.5
 python-dotenv==0.19.2
+cryptography==41.0.3
+setuptools>=65.5.1
+wheel>=0.40.0
