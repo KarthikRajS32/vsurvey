@@ -1,7 +1,7 @@
-fastapi==0.85.0
-pydantic==1.9.2
+fastapi==0.70.0
+pydantic==1.8.2
 firebase-admin==5.4.0
 google-cloud-firestore==2.7.2
 python-multipart==0.0.5
 python-dotenv==0.19.2
-uvicorn==0.18.3
+uvicorn==0.15.0
