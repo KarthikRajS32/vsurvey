@@ -1,6 +1,0 @@
-services:
-  - type: web
-    name: survey-app-backend
-    env: docker
-    dockerfilePath: ./Dockerfile
-
