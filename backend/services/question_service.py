@@ -4,7 +4,7 @@ import uuid
 
 from models.schemas import Question, QuestionCreate, QuestionUpdate, QuestionType, PaginatedResponse
 from models.database import get_db, COLLECTIONS
-from google.cloud.firestore_v1 import FieldFilter
+# FieldFilter not available in older firestore version
 
 class QuestionService:
     def __init__(self):

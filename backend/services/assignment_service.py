@@ -8,7 +8,7 @@ from models.schemas import (
 from models.database import get_db, COLLECTIONS
 from services.survey_service import SurveyService
 from services.user_service import UserService
-from google.cloud.firestore_v1 import FieldFilter
+# FieldFilter not available in older firestore version
 
 class AssignmentService:
     def __init__(self):
