@@ -4,4 +4,4 @@ firebase-admin==5.4.0
 google-cloud-firestore==2.7.2
 python-multipart==0.0.5
 python-dotenv==0.19.2
-waitress==2.1.2
+uvicorn==0.15.0
