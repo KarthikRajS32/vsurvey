@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -18,14 +18,14 @@ class SurveyStatus(str, Enum):
 # User Models
 class UserBase(BaseModel):
     full_name: str = Field(..., min_length=1, max_length=100)
-    email: EmailStr
+    email: str
 
 class UserCreate(UserBase):
     pass
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     is_active: Optional[bool] = None
     status: Optional[str] = None
 
@@ -141,7 +141,7 @@ class ClientAdminProfile(BaseModel):
 
 class ClientAdmin(BaseModel):
     id: str
-    email: EmailStr
+    email: str
     profile: Optional[ClientAdminProfile] = None
     is_first_time: bool = True
     created_at: datetime
