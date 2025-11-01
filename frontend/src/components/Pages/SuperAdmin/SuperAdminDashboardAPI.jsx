@@ -766,7 +766,7 @@ const SuperAdminDashboardAPI = () => {
         const token = await user.getIdToken();
         
         console.log("Attempting to delete from Firebase Auth with UID:", firebaseUid);
-        const response = await fetch(`http://localhost:8000/api/users/${firebaseUid}/auth`, {
+        const response = await fetch(`https://v-survey-backend.onrender.com/api/users/${firebaseUid}/auth`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,

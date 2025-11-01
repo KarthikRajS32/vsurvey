@@ -10,7 +10,7 @@ import { createUserWithEmailAndPassword, sendPasswordResetEmail, deleteUser } fr
 import { db, auth } from "../../../firebase";
 import { collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, setDoc, updateDoc, getDocs, where } from "firebase/firestore";
 // API base URL
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'https://v-survey-backend.onrender.com';
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
