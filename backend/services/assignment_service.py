@@ -85,6 +85,18 @@ class AssignmentService:
         
         collection = await self.get_client_assignments_collection(assigned_by)
         
+        # Get all existing assignments for this survey to check for duplicates
+        existing_assignments = collection.where(
+            "survey_id", "==", assignment_data.survey_id
+        ).where(
+            "assigned_by", "==", assigned_by
+        ).get()
+        
+        existing_user_ids = set()
+        for doc in existing_assignments:
+            data = doc.to_dict()
+            existing_user_ids.add(data.get("user_id"))
+        
         # Verify all users exist and belong to the client admin
         assignments = []
         for user_id in assignment_data.user_ids:
@@ -92,14 +104,9 @@ class AssignmentService:
             if not user:
                 continue  # Skip invalid users
             
-            # Check if assignment already exists
-            existing_docs = collection.where(
-                "survey_id", "==", assignment_data.survey_id
-            ).where(
-                "user_id", "==", user_id
-            ).limit(1).get()
-            
-            if len(list(existing_docs)) > 0:
+            # Check if assignment already exists for this user-survey combination
+            if user_id in existing_user_ids:
+                print(f"DEBUG: Skipping duplicate assignment - Survey {assignment_data.survey_id} already assigned to user {user_id}")
                 continue  # Skip if already assigned
             
             # Create assignment
@@ -118,6 +125,12 @@ class AssignmentService:
             # Save to client-specific Firestore collection
             collection.document(assignment_id).set(assignment.dict())
             assignments.append(assignment)
+            
+            # Add to existing_user_ids to prevent duplicates within this batch
+            existing_user_ids.add(user_id)
+        
+        if len(assignments) == 0 and len(assignment_data.user_ids) > 0:
+            raise ValueError("Survey is already assigned to all selected users")
         
         return assignments
 

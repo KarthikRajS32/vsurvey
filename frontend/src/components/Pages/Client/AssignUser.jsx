@@ -913,52 +913,62 @@ const AssignUser = ({
           return;
         }
 
-        // Create assignments in Firebase
+        // Check for existing assignments to prevent duplicates
         const assignmentsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments");
+        const existingAssignments = await getDocs(assignmentsRef);
         
+        const existingPairs = new Set();
+        existingAssignments.forEach((doc) => {
+          const data = doc.data();
+          existingPairs.add(`${data.user_id}_${data.survey_id}`);
+        });
+        
+        let assignmentCount = 0;
+        let skippedCount = 0;
+        
+        // Create assignments in Firebase, checking for duplicates
         for (const userId of selectedUser) {
           for (const surveyId of selectedSurveys) {
+            const pairKey = `${userId}_${surveyId}`;
+            
+            if (existingPairs.has(pairKey)) {
+              console.log(`Skipping duplicate assignment: User ${userId}, Survey ${surveyId}`);
+              skippedCount++;
+              continue;
+            }
+            
             const assignmentData = {
-              created_at: new Date().toISOString(),
+              assigned_by: currentUser.email,
+              assigned_at: new Date().toISOString(),
               is_active: true,
               survey_id: surveyId,
-              updated_at: new Date().toISOString(),
               user_id: userId
             };
             
             await addDoc(assignmentsRef, assignmentData);
+            existingPairs.add(pairKey); // Prevent duplicates within this batch
+            assignmentCount++;
           }
         }
 
-        // Update local state for UI
-        const newAssignments = selectedSurveys.map((surveyId) => ({
-          ...surveys.find((s) => s.id === surveyId),
-          active: true,
-        }));
-
-        const updatedAssignments = { ...userAssignments };
-
-        selectedUser.forEach((userId) => {
-          updatedAssignments[userId] = [
-            ...(updatedAssignments[userId] || []),
-            ...newAssignments.filter(
-              (survey) =>
-                !(updatedAssignments[userId] || []).some(
-                  (existing) => existing.id === survey.id
-                )
-            ),
-          ];
-        });
-
-        setUserAssignments(updatedAssignments);
+        // Reload assignments to update UI
+        await loadAssignments();
 
         const userNames = selectedUser
           .map((id) => users.find((u) => u.id === id)?.name)
           .join(", ");
-        setConfirmationMessage(
-          `Successfully assigned ${selectedSurveys.length} survey${selectedSurveys.length > 1 ? "s" : ""} to ${userNames}`
-        );
-        setTimeout(() => setConfirmationMessage(""), 3000);
+        
+        let message = '';
+        if (assignmentCount > 0 && skippedCount > 0) {
+          message = `Successfully assigned ${assignmentCount} survey${assignmentCount > 1 ? 's' : ''} to ${userNames}. ${skippedCount} duplicate${skippedCount > 1 ? 's' : ''} skipped.`;
+        } else if (assignmentCount > 0) {
+          message = `Successfully assigned ${assignmentCount} survey${assignmentCount > 1 ? 's' : ''} to ${userNames}`;
+        } else {
+          message = `All selected surveys are already assigned to the selected users.`;
+        }
+        
+        setConfirmationMessage(message);
+        setTimeout(() => setConfirmationMessage(""), 5000);
 
         setSelectedUser([]);
         setSelectedSurveys([]);
@@ -1078,44 +1088,58 @@ const AssignUser = ({
         return;
       }
 
-      // Add new surveys to Firebase
+      // Check for existing assignments to prevent duplicates
       if (selectedSurveysForUser.length > 0) {
         const assignmentsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments");
+        const existingAssignments = await getDocs(query(assignmentsRef, where("user_id", "==", editingUser.id)));
+        
+        const existingSurveyIds = new Set();
+        existingAssignments.forEach((doc) => {
+          const data = doc.data();
+          existingSurveyIds.add(data.survey_id);
+        });
+        
+        let assignmentCount = 0;
+        let skippedCount = 0;
         
         for (const surveyId of selectedSurveysForUser) {
+          if (existingSurveyIds.has(surveyId)) {
+            console.log(`Skipping duplicate assignment: User ${editingUser.id}, Survey ${surveyId}`);
+            skippedCount++;
+            continue;
+          }
+          
           const assignmentData = {
-            created_at: new Date().toISOString(),
+            assigned_by: currentUser.email,
+            assigned_at: new Date().toISOString(),
             is_active: true,
             survey_id: surveyId,
-            updated_at: new Date().toISOString(),
             user_id: editingUser.id
           };
           
           await addDoc(assignmentsRef, assignmentData);
+          assignmentCount++;
         }
+        
+        let message = '';
+        if (assignmentCount > 0 && skippedCount > 0) {
+          message = `Added ${assignmentCount} survey${assignmentCount > 1 ? 's' : ''}. ${skippedCount} duplicate${skippedCount > 1 ? 's' : ''} skipped.`;
+        } else if (assignmentCount > 0) {
+          message = `Successfully added ${assignmentCount} survey${assignmentCount > 1 ? 's' : ''}!`;
+        } else {
+          message = 'All selected surveys are already assigned to this user.';
+        }
+        
+        setConfirmationMessage(message);
       }
 
-      // Update local state
-      const newSurveys = selectedSurveysForUser.map(surveyId => ({
-        ...surveys.find(s => s.id === surveyId),
-        active: true
-      }));
-      
-      setUserAssignments(prev => ({
-        ...prev,
-        [editingUser.id]: [
-          ...(prev[editingUser.id] || []).filter(s => s.active !== false),
-          ...newSurveys.filter(survey => 
-            !(prev[editingUser.id] || []).some(existing => existing.id === survey.id)
-          )
-        ]
-      }));
+      // Reload assignments to update UI
+      await loadAssignments();
 
       setIsEditModalOpen(false);
       setEditingUser(null);
       setSelectedSurveysForUser([]);
-      setConfirmationMessage('Surveys updated successfully!');
-      setTimeout(() => setConfirmationMessage(''), 3000);
+      setTimeout(() => setConfirmationMessage(''), 5000);
     } catch (error) {
       console.error('Error updating user surveys:', error);
       setConfirmationMessage('Error updating surveys. Please try again.');
