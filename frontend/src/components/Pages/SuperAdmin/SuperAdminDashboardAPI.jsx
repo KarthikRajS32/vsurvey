@@ -494,6 +494,7 @@ import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
+  deleteUser,
 } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -751,50 +752,40 @@ const SuperAdminDashboardAPI = () => {
     try {
       console.log("Deleting client:", clientToDelete.id, "UID:", clientToDelete.firebaseUid);
       
-      // Use document ID as Firebase UID (since we now use UID as document ID)
-      const firebaseUid = clientToDelete.firebaseUid || clientToDelete.id;
+      let authDeleted = false;
+      let firestoreDeleted = false;
       
-      // Delete from Firebase Authentication first
+      // Delete from Firebase Auth using secondary auth (admin privileges)
+      const firebaseUid = clientToDelete.firebaseUid || clientToDelete.id;
       try {
-        // Re-authenticate as SuperAdmin if needed
-        let user = auth.currentUser;
-        if (!user) {
-          await signInWithEmailAndPassword(auth, "superadmin@vsurvey.com", "superadmin123");
-          user = auth.currentUser;
-        }
-        
-        const token = await user.getIdToken();
-        
-        console.log("Attempting to delete from Firebase Auth with UID:", firebaseUid);
-        const response = await fetch(`https://v-survey-backend.onrender.com/api/users/${firebaseUid}/auth`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        const responseText = await response.text();
-        console.log("Firebase Auth deletion response:", response.status, responseText);
-        
-        if (response.ok) {
-          console.log("Client deleted from Firebase Auth successfully");
-        } else {
-          console.error("Failed to delete from Firebase Auth:", responseText);
-        }
+        await deleteUser(secondaryAuth.currentUser || { uid: firebaseUid });
+        authDeleted = true;
+        console.log('Client deleted from Firebase Auth');
       } catch (authError) {
-        console.error("Error deleting from Firebase Auth:", authError);
+        console.warn('Firebase Auth deletion failed:', authError);
       }
       
       // Delete from Firestore
-      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
-      console.log("Deleting from Firestore with document ID:", clientToDelete.id);
-      await deleteDoc(
-        doc(db, "superadmin", superadminId, "clients", clientToDelete.id)
-      );
-      console.log("Client deleted from Firestore successfully");
+      try {
+        const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+        await deleteDoc(
+          doc(db, "superadmin", superadminId, "clients", clientToDelete.id)
+        );
+        firestoreDeleted = true;
+        console.log('Client deleted from Firestore');
+      } catch (firestoreError) {
+        console.error('Firestore deletion failed:', firestoreError);
+      }
       
-      setMessage("Client admin deleted successfully!");
+      // Show appropriate message
+      if (authDeleted && firestoreDeleted) {
+        setMessage("✅ Client deleted from both Authentication and Database!");
+      } else if (firestoreDeleted) {
+        setMessage("✅ Client deleted from Database. Authentication deletion may have failed.");
+      } else {
+        setMessage("❌ Failed to delete client.");
+      }
+      
       setTimeout(() => setMessage(""), 3000);
       closeDeleteModal();
       loadClients();
