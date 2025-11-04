@@ -110,7 +110,7 @@ async def delete_user(
     user_id: str,
     current_user_email: str = Depends(get_current_user_email)
 ):
-    """Delete a user"""
+    """Delete a user completely from both Firestore and Firebase Auth"""
     try:
         user_service = UserService()
         result = await user_service.delete_user_completely(user_id, current_user_email)
@@ -143,6 +143,32 @@ async def delete_user(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.delete("/{user_id}/auth", response_model=APIResponse)
+async def delete_user_from_auth_only(
+    user_id: str,
+    current_user_email: str = Depends(get_current_user_email)
+):
+    """Delete user from Firebase Authentication only"""
+    try:
+        from models.database import get_firebase_auth
+        auth_client = get_firebase_auth()
+        
+        try:
+            auth_client.delete_user(user_id)
+            return APIResponse(
+                success=True,
+                message="User deleted from Firebase Authentication",
+                data={"user_id": user_id}
+            )
+        except auth_client.UserNotFoundError:
+            return APIResponse(
+                success=False,
+                message="User not found in Firebase Authentication",
+                data={"user_id": user_id}
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete user from Firebase Auth: {str(e)}")
 
 @router.patch("/{user_id}/toggle-status", response_model=APIResponse)
 async def toggle_user_status(

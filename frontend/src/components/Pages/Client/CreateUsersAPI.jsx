@@ -278,32 +278,37 @@ const CreateUsersAPI = ({ profile, onProfileEdit, onLogout }) => {
       try {
         setLoading(true);
         
-        // Delete from Firebase Authentication first
+        let authDeleted = false;
+        let firestoreDeleted = false;
+        
+        // Delete from Firebase Auth using secondary auth (admin privileges)
         try {
-          const token = await auth.currentUser.getIdToken();
-          const response = await fetch(`${API_BASE_URL}/api/users/${userToDelete.id}/auth`, {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (response.ok) {
-            console.log('User deleted from Firebase Auth:', userToDelete.id);
-          } else {
-            console.warn('Failed to delete from Firebase Auth');
-          }
+          await deleteUser(secondaryAuth.currentUser || { uid: userToDelete.id });
+          authDeleted = true;
+          console.log('User deleted from Firebase Auth');
         } catch (authError) {
-          console.warn('Failed to delete from Firebase Auth (user may not exist):', authError);
-          // Continue with Firestore deletion even if Auth deletion fails
+          console.warn('Firebase Auth deletion failed:', authError);
         }
         
         // Delete from Firestore
-        const userRef = doc(db, "users", userToDelete.id);
-        await deleteDoc(userRef);
+        try {
+          const userRef = doc(db, "users", userToDelete.id);
+          await deleteDoc(userRef);
+          firestoreDeleted = true;
+          console.log('User deleted from Firestore');
+        } catch (firestoreError) {
+          console.error('Firestore deletion failed:', firestoreError);
+        }
         
-        setMessage("✅ User deleted successfully from both Authentication and Database!");
+        // Show appropriate message
+        if (authDeleted && firestoreDeleted) {
+          setMessage("✅ User deleted from both Authentication and Database!");
+        } else if (firestoreDeleted) {
+          setMessage("✅ User deleted from Database. Authentication deletion may have failed.");
+        } else {
+          setMessage("❌ Failed to delete user.");
+        }
+        
         setTimeout(() => setMessage(""), 3000);
       } catch (err) {
         setMessage(`❌ Failed to delete user: ${err.message}`);

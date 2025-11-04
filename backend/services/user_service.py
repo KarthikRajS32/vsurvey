@@ -273,8 +273,9 @@ class UserService:
         }
         
         try:
-            collection = await self.get_client_users_collection(created_by)
-            doc_ref = collection.document(user_id)
+            # Get user from flat users collection
+            users_collection = self.db.collection("users")
+            doc_ref = users_collection.document(user_id)
             doc = doc_ref.get()
             
             if not doc.exists:
@@ -289,21 +290,17 @@ class UserService:
                 result["errors"].append("User does not belong to current admin")
                 return result
             
-            # Delete from Firebase Auth
+            # Delete from Firebase Auth using user_id as UID
             try:
-                from models.database import get_firebase_auth
-                auth_client = get_firebase_auth()
+                from firebase_admin import auth as firebase_auth
                 
                 try:
-                    # Find user by email
-                    user_record = auth_client.get_user_by_email(user_data["email"])
-                    # Delete user
-                    auth_client.delete_user(user_record.uid)
+                    firebase_auth.delete_user(user_id)
                     result["firebase_auth_deleted"] = True
-                    print(f"Successfully deleted user from Firebase Auth: {user_data['email']}")
-                except auth.UserNotFoundError:
+                    print(f"Successfully deleted user from Firebase Auth: {user_id}")
+                except firebase_auth.UserNotFoundError:
                     result["errors"].append("User not found in Firebase Authentication")
-                    print(f"User not found in Firebase Auth: {user_data['email']}")
+                    print(f"User not found in Firebase Auth: {user_id}")
                 except Exception as auth_error:
                     error_msg = f"Firebase Auth deletion failed: {str(auth_error)}"
                     result["errors"].append(error_msg)
@@ -317,7 +314,7 @@ class UserService:
             try:
                 doc_ref.delete()
                 result["firestore_deleted"] = True
-                print(f"Successfully deleted user from Firestore: {user_data['email']}")
+                print(f"Successfully deleted user from Firestore: {user_id}")
             except Exception as firestore_error:
                 error_msg = f"Firestore deletion failed: {str(firestore_error)}"
                 result["errors"].append(error_msg)
