@@ -23,7 +23,8 @@ app = FastAPI(
 allowed_origins = [
     "http://localhost:5173", 
     "http://localhost:3000",
-    "https://v-survey-app.netlify.app"
+    "https://v-survey-app.netlify.app",
+    "*"  # Allow all origins for development
 ]
 
 # Add environment-based origins
@@ -47,7 +48,37 @@ app.include_router(questions.router, prefix="/api/questions", tags=["questions"]
 app.include_router(surveys.router, prefix="/api/surveys", tags=["surveys"])
 app.include_router(assignments.router, prefix="/api/assignments", tags=["assignments"])
 
-# Firebase Auth deletion is now handled in the users router
+@app.get("/api/test-user/{user_id}")
+async def test_user_exists(user_id: str):
+    """Test if user exists in Firebase Auth"""
+    try:
+        user = firebase_auth.get_user(user_id)
+        return {"success": True, "exists": True, "email": user.email}
+    except firebase_auth.UserNotFoundError:
+        return {"success": True, "exists": False}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.delete("/api/delete-user/{user_id}")
+async def delete_client_from_auth(user_id: str):
+    """Delete client from Firebase Authentication using Admin SDK"""
+    try:
+        # First check if user exists
+        try:
+            user = firebase_auth.get_user(user_id)
+            print(f"Found user: {user.email} with UID: {user_id}")
+        except firebase_auth.UserNotFoundError:
+            return {"success": False, "message": "User not found in Firebase Auth", "error": "USER_NOT_FOUND"}
+        
+        # Delete the user
+        firebase_auth.delete_user(user_id)
+        print(f"Successfully deleted user with UID: {user_id}")
+        return {"success": True, "message": "User deleted from Firebase Auth"}
+    except firebase_auth.UserNotFoundError:
+        return {"success": False, "message": "User not found in Firebase Auth", "error": "USER_NOT_FOUND"}
+    except Exception as e:
+        print(f"Error deleting user {user_id}: {str(e)}")
+        return {"success": False, "message": f"Failed to delete user: {str(e)}", "error": "DELETION_FAILED"}
 
 @app.get("/")
 async def root():

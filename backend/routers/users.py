@@ -8,6 +8,7 @@ from models.schemas import (
 from models.database import get_db, COLLECTIONS
 from middleware.auth import get_current_user_email
 from services.user_service import UserService
+from firebase_admin import auth as firebase_auth
 
 router = APIRouter()
 

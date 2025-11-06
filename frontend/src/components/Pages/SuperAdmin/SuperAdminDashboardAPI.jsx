@@ -213,6 +213,7 @@ const SuperAdminDashboardAPI = () => {
         name: "",
         phone: "",
         updated_at: new Date().toISOString(),
+        tempPassword: tempPassword, // Store for deletion purposes
       };
 
       await setDoc(clientDocRef, newClient);
@@ -292,19 +293,70 @@ const SuperAdminDashboardAPI = () => {
 
   const confirmDelete = async () => {
     try {
-      console.log("Deleting client:", clientToDelete.id, "UID:", clientToDelete.firebaseUid);
+      console.log("=== STARTING CLIENT DELETION ===");
+      console.log("Client ID:", clientToDelete.id);
+      console.log("Firebase UID:", clientToDelete.firebaseUid);
+      console.log("Client Status:", clientToDelete.status);
+      console.log("Client Email:", clientToDelete.email);
+      console.log("Has Temp Password:", !!clientToDelete.tempPassword);
       
       let authDeleted = false;
       let firestoreDeleted = false;
       
-      // Delete from Firebase Auth using secondary auth (admin privileges)
+      // Delete from Firebase Auth
       const firebaseUid = clientToDelete.firebaseUid || clientToDelete.id;
+      console.log("Using Firebase UID for deletion:", firebaseUid);
+      
       try {
-        await deleteUser(secondaryAuth.currentUser || { uid: firebaseUid });
-        authDeleted = true;
-        console.log('Client deleted from Firebase Auth');
+        // Try to delete from Firebase Auth
+        if (clientToDelete.status === 'pending' && clientToDelete.tempPassword) {
+          // Use stored temporary password for pending users
+          await signInWithEmailAndPassword(secondaryAuth, clientToDelete.email, clientToDelete.tempPassword);
+          if (secondaryAuth.currentUser) {
+            await deleteUser(secondaryAuth.currentUser);
+            authDeleted = true;
+            console.log('Pending client deleted from Firebase Auth');
+          }
+        } else {
+          // For active clients, try with current user's ID token
+          console.log(`Attempting authenticated deletion for active client: ${firebaseUid}`);
+          try {
+            // Get current user's ID token
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+              const idToken = await currentUser.getIdToken();
+              console.log('Got ID token for authenticated request');
+              
+              const response = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:delete?key=AIzaSyAuvvUIiOzx4AVE9FTXaubNGrj0rTypihU', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  idToken: idToken,
+                  localId: firebaseUid
+                })
+              });
+              
+              console.log(`REST API response status: ${response.status}`);
+              const responseData = await response.text();
+              console.log('REST API response:', responseData);
+              
+              if (response.ok) {
+                authDeleted = true;
+                console.log('Active client deleted from Firebase Auth via REST API');
+              } else {
+                console.warn(`REST API deletion failed with status ${response.status}: ${responseData}`);
+              }
+            } else {
+              console.warn('No current user for ID token');
+            }
+          } catch (restError) {
+            console.error('REST API deletion error:', restError);
+          }
+        }
       } catch (authError) {
-        console.warn('Firebase Auth deletion failed:', authError);
+        console.warn('Firebase Auth deletion failed:', authError.message);
       }
       
       // Delete from Firestore
@@ -319,16 +371,24 @@ const SuperAdminDashboardAPI = () => {
         console.error('Firestore deletion failed:', firestoreError);
       }
       
+      // Final deletion summary
+      console.log("=== DELETION SUMMARY ===");
+      console.log("Auth Deleted:", authDeleted);
+      console.log("Firestore Deleted:", firestoreDeleted);
+      
       // Show appropriate message
       if (authDeleted && firestoreDeleted) {
-        setMessage("✅ Client deleted from both Authentication and Database!");
+        setMessage("✅ Client deleted completely from both Authentication and Database!");
+        console.log("SUCCESS: Complete deletion");
       } else if (firestoreDeleted) {
-        setMessage("✅ Client deleted from Database. Authentication deletion may have failed.");
+        setMessage("✅ Client deleted from Database. Authentication deletion may require manual cleanup.");
+        console.log("PARTIAL: Firestore deleted, Auth deletion failed");
       } else {
-        setMessage("❌ Failed to delete client.");
+        setMessage("❌ Failed to delete client from Database.");
+        console.log("FAILED: Both deletions failed");
       }
       
-      setTimeout(() => setMessage(""), 3000);
+      setTimeout(() => setMessage(""), 5000);
       closeDeleteModal();
       loadClients();
     } catch (error) {

@@ -22,6 +22,7 @@ const Login = ({ onLogin }) => {
     try {
       // Check for super admin credentials
       if (email === 'superadmin@vsurvey.com' && password === 'superadmin123') {
+        localStorage.setItem('currentSuperAdmin', JSON.stringify({ email: email }))
         onLogin('superadmin')
         return
       }

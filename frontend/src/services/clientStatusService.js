@@ -177,6 +177,9 @@ export const completeProfileSetup = async (email, profileData) => {
       phone: profileData.phone,
       address: profileData.address,
       is_first_time: true,
+      status: "active",
+      isActive: true,
+      activatedAt: new Date().toISOString(),
       updated_at: new Date().toISOString()
     });
     
