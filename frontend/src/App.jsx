@@ -200,9 +200,9 @@ const startClientStatusMonitoring = (email, onLogout) => {
       const clientData = snapshot.docs[0].data();
       console.log('Client data:', clientData);
       
-      // Only show deactivation for clients who were previously active but are now inactive
-      // Don't show for pending clients (new clients setting up profile)
-      if (clientData.status === "inactive" && clientData.status !== "pending") {
+      // Check if client is deactivated (isActive: false)
+      // Don't auto-logout pending clients (new clients setting up profile)
+      if (clientData.isActive === false && clientData.status !== "pending") {
         console.log('Client deactivated, logging out:', email);
         auth.signOut();
         onLogout();
@@ -526,7 +526,7 @@ function App() {
             !session ? (
               <>
                 {showDeactivationMessage && (
-                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg p-6 max-w-md mx-4">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Deactivated</h3>
                       <p className="text-gray-600 mb-6">Your account has been deactivated. Please contact the administrator.</p>

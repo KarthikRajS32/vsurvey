@@ -102,6 +102,31 @@ export const isClientAdminActive = async (email) => {
 };
 
 /**
+ * Check if client admin is deactivated
+ * @param {string} email - Client admin email
+ * @returns {Promise<boolean>} - True if deactivated, false otherwise
+ */
+export const isClientAdminDeactivated = async (email) => {
+  try {
+    const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+    const clientsRef = collection(db, "superadmin", superadminId, "clients");
+    const q = query(clientsRef, where("email", "==", email));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      return false;
+    }
+    
+    const clientData = snapshot.docs[0].data();
+    return clientData.isActive === false;
+    
+  } catch (error) {
+    console.error('Error checking client deactivation status:', error);
+    return false;
+  }
+};
+
+/**
  * Check if client admin needs profile setup
  * @param {string} email - Client admin email
  * @returns {Promise<boolean>} - True if profile setup needed, false otherwise

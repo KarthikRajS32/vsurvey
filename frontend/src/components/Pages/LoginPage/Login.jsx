@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Card, CardContent } from '../../ui/card'
-import loginImage from '../../../assets/1.png'
+import loginImage from '../../../assets/loginImage.png'
 import authService from '../../../services/authService'
-import { activateClientAdmin, isClientAdminPending, clientAdminExists, isClientAdminActive, needsProfileSetup } from '../../../services/clientStatusService'
+import { activateClientAdmin, isClientAdminPending, clientAdminExists, isClientAdminActive, isClientAdminDeactivated, needsProfileSetup } from '../../../services/clientStatusService'
 import { activateUser, isUserPending, userExists } from '../../../services/userStatusService'
 import { notifyClientStatusChange } from '../../../services/superAdminNotification'
 
@@ -12,9 +12,11 @@ const Login = ({ onLogin }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setErrorMessage('')
     setIsLoading(true)
     
     try {
@@ -42,6 +44,15 @@ const Login = ({ onLogin }) => {
         }
         
         if (clientExists) {
+          // Check if client admin is deactivated
+          const isDeactivated = await isClientAdminDeactivated(email)
+          
+          if (isDeactivated) {
+            setErrorMessage('Account Deactivated')
+            setIsLoading(false)
+            return
+          }
+          
           // Check if client admin is pending and activate them
           const isPending = await isClientAdminPending(email)
           
@@ -114,7 +125,7 @@ const Login = ({ onLogin }) => {
         }, 1500)
       }
     } catch (error) {
-      alert('Invalid email or password: ' + error.message)
+      setErrorMessage('Invalid email or password: ' + error.message)
     } finally {
       setIsLoading(false)
     }
@@ -228,6 +239,12 @@ const Login = ({ onLogin }) => {
                     )}
                   </Button>
                 </form>
+
+                {errorMessage && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md text-center">
+                    <p className="text-sm text-red-600">{errorMessage}</p>
+                  </div>
+                )}
 
                 <div className="mt-8 text-center">
                   <p className="text-sm text-gray-500">
