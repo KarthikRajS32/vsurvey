@@ -9,20 +9,13 @@ import ClientAdminHeader from "./ClientAdminHeader";
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, deleteUser } from "firebase/auth";
 import { db, auth } from "../../../firebase";
 import { collection, addDoc, onSnapshot, query, orderBy, doc, deleteDoc, setDoc, updateDoc, getDocs, where } from "firebase/firestore";
-// API base URL
-const API_BASE_URL = 'https://v-survey-backend.onrender.com';
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
+import { FIREBASE_CONFIG } from "../../../config/firebaseConfig";
+
 // Create secondary Firebase app for user creation
-const secondaryApp = initializeApp({
-  apiKey: "AIzaSyAuvvUIiOzx4AVE9FTXaubNGrj0rTypihU",
-  authDomain: "vsurvey-68195.firebaseapp.com",
-  projectId: "vsurvey-68195",
-  storageBucket: "vsurvey-68195.firebasestorage.app",
-  messagingSenderId: "669564501775",
-  appId: "1:669564501775:web:0f69ced66244252014887a"
-}, "secondary");
+const secondaryApp = initializeApp(FIREBASE_CONFIG, "secondary");
 
 const secondaryAuth = getAuth(secondaryApp);
 

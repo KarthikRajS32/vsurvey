@@ -1,6 +1,7 @@
 import { auth } from '../firebase';
+import { API_CONFIG } from '../config/apiConfig';
 
-const API_BASE_URL = 'https://v-survey-backend.onrender.com/api';
+const API_BASE_URL = API_CONFIG.BASE_URL;
 
 class ApiService {
   constructor() {

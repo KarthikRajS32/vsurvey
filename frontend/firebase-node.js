@@ -1,14 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { FIREBASE_CONFIG } from "./src/config/firebaseConfig.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAuvvUIiOzx4AVE9FTXaubNGrj0rTypihU",
-  authDomain: "vsurvey-68195.firebaseapp.com",
-  projectId: "vsurvey-68195",
-  storageBucket: "vsurvey-68195.firebasestorage.app",
-  messagingSenderId: "669564501775",
-  appId: "1:669564501775:web:0f69ced66244252014887a"
-};
+const firebaseConfig = FIREBASE_CONFIG;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

@@ -3,17 +3,10 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { FIREBASE_CONFIG } from "./config/firebaseConfig";
 
 // Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyAuvvUIiOzx4AVE9FTXaubNGrj0rTypihU",
-  authDomain: "vsurvey-68195.firebaseapp.com",
-  projectId: "vsurvey-68195",
-  storageBucket: "vsurvey-68195.firebasestorage.app",
-  messagingSenderId: "669564501775",
-  appId: "1:669564501775:web:0f69ced66244252014887a",
-  measurementId: "G-ZGP8L9HKY4",
-};
+const firebaseConfig = FIREBASE_CONFIG;
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

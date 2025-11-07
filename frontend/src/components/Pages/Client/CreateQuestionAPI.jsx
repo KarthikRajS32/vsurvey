@@ -285,19 +285,42 @@ const CreateQuestionAPI = ({
   const confirmDelete = async () => {
     if (questionToDelete) {
       try {
-        // Delete from Firebase
         const clientId = await getClientId();
         if (!clientId) {
           throw new Error('No client ID found for current user');
         }
         
+        // Remove question from all surveys first
+        const surveysRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys");
+        const surveysSnapshot = await getDocs(surveysRef);
+        
+        const updatePromises = [];
+        surveysSnapshot.forEach((surveyDoc) => {
+          const surveyData = surveyDoc.data();
+          if (surveyData.questions && surveyData.questions.includes(questionToDelete.id)) {
+            const updatedQuestions = surveyData.questions.filter(qId => qId !== questionToDelete.id);
+            const surveyRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyDoc.id);
+            updatePromises.push(
+              updateDoc(surveyRef, {
+                questions: updatedQuestions,
+                questionCount: updatedQuestions.length,
+                updatedAt: new Date().toISOString()
+              })
+            );
+          }
+        });
+        
+        // Wait for all survey updates to complete
+        await Promise.all(updatePromises);
+        
+        // Delete from Firebase
         const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", questionToDelete.id);
         await deleteDoc(questionRef);
         
         // Also delete from backend API
         await deleteQuestion(questionToDelete.id);
         
-        setMessage("Question deleted successfully!");
+        setMessage(`Question deleted successfully! Removed from ${updatePromises.length} survey(s).`);
         setTimeout(() => setMessage(""), 3000);
         
         // Refresh Firebase questions list

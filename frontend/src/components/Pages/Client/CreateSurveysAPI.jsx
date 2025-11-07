@@ -199,10 +199,37 @@ const CreateSurveysAPI = ({ profile, onProfileEdit, onLogout }) => {
           throw new Error('No client ID found for current user');
         }
         
+        // Delete all survey responses first
+        const responsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyToDelete.id, "responses");
+        const responsesSnapshot = await getDocs(responsesRef);
+        
+        const responseDeletePromises = [];
+        responsesSnapshot.forEach((responseDoc) => {
+          const responseRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyToDelete.id, "responses", responseDoc.id);
+          responseDeletePromises.push(deleteDoc(responseRef));
+        });
+        
+        // Remove survey from all user assignments
+        const assignmentsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments");
+        const assignmentsSnapshot = await getDocs(assignmentsRef);
+        
+        const assignmentDeletePromises = [];
+        assignmentsSnapshot.forEach((assignmentDoc) => {
+          const assignmentData = assignmentDoc.data();
+          if (assignmentData.survey_id === surveyToDelete.id) {
+            const assignmentRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "survey_assignments", assignmentDoc.id);
+            assignmentDeletePromises.push(deleteDoc(assignmentRef));
+          }
+        });
+        
+        // Wait for all deletions to complete
+        await Promise.all([...responseDeletePromises, ...assignmentDeletePromises]);
+        
+        // Delete the survey
         const surveyRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyToDelete.id);
         await deleteDoc(surveyRef);
         
-        setMessage("Survey deleted successfully!");
+        setMessage(`Survey deleted successfully! Removed ${responseDeletePromises.length} response(s) and ${assignmentDeletePromises.length} assignment(s).`);
         setTimeout(() => setMessage(""), 3000);
         
         await loadSurveys();

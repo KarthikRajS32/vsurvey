@@ -42,18 +42,10 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { setSuperAdminUpdateCallback } from "../../../services/superAdminNotification";
 
+import { FIREBASE_CONFIG } from "../../../config/firebaseConfig";
+
 // Create separate Firebase app for user creation (doesn't affect main auth state)
-const secondaryApp = initializeApp(
-  {
-    apiKey: "AIzaSyAuvvUIiOzx4AVE9FTXaubNGrj0rTypihU",
-    authDomain: "vsurvey-68195.firebaseapp.com",
-    projectId: "vsurvey-68195",
-    storageBucket: "vsurvey-68195.firebasestorage.app",
-    messagingSenderId: "669564501775",
-    appId: "1:669564501775:web:0f69ced66244252014887a",
-  },
-  "secondary"
-);
+const secondaryApp = initializeApp(FIREBASE_CONFIG, "secondary");
 
 const secondaryAuth = getAuth(secondaryApp);
 
@@ -327,7 +319,7 @@ const SuperAdminDashboardAPI = () => {
               const idToken = await currentUser.getIdToken();
               console.log('Got ID token for authenticated request');
               
-              const response = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:delete?key=AIzaSyAuvvUIiOzx4AVE9FTXaubNGrj0rTypihU', {
+              const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
