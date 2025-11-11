@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { User, Upload } from "@/components/ui/icons";
 import { completeProfileSetup } from "../../../services/clientStatusService";
-import { db } from '../../../firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from "../../../firebase";
+import { collection, getDocs, query, where } from "firebase/firestore";
 
 const countryCodes = [
   { code: "+1", flag: "🇺🇸", name: "United States" },
@@ -74,37 +74,49 @@ const ProfileSetup = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const fileInputRef = useRef(null);
-  
-  const filteredCountries = countryCodes.filter(country =>
-    country.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    country.code.includes(searchTerm)
-  ).sort((a, b) => {
-    // Prioritize codes that start with the search term
-    const aStartsWithSearch = a.code.startsWith(searchTerm);
-    const bStartsWithSearch = b.code.startsWith(searchTerm);
-    if (aStartsWithSearch && !bStartsWithSearch) return -1;
-    if (!aStartsWithSearch && bStartsWithSearch) return 1;
-    return 0;
-  });
+
+  const filteredCountries = countryCodes
+    .filter(
+      (country) =>
+        country.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        country.code.includes(searchTerm)
+    )
+    .sort((a, b) => {
+      // Prioritize codes that start with the search term
+      const aStartsWithSearch = a.code.startsWith(searchTerm);
+      const bStartsWithSearch = b.code.startsWith(searchTerm);
+      if (aStartsWithSearch && !bStartsWithSearch) return -1;
+      if (!aStartsWithSearch && bStartsWithSearch) return 1;
+      return 0;
+    });
 
   useEffect(() => {
     const fetchClientData = async () => {
       try {
-        const superadminId = "U0UjGVvDJoDbLtWAhyjp";
-        const clientsRef = collection(db, "superadmin", superadminId, "clients");
+        const superadminId = "u1JiUOCTXxaOkoK83AFH";
+        const clientsRef = collection(
+          db,
+          "superadmin",
+          superadminId,
+          "clients"
+        );
         const q = query(clientsRef, where("email", "==", email));
         const snapshot = await getDocs(q);
-        
+
         if (!snapshot.empty) {
           const clientData = snapshot.docs[0].data();
           const firebaseData = {
-            profileImage: clientData.profileImage || existingProfile?.profileImage || null,
+            profileImage:
+              clientData.profileImage || existingProfile?.profileImage || null,
             name: clientData.name || existingProfile?.name || "",
             email: email,
-            company_name: clientData.company_name || existingProfile?.company_name || "",
-            company_size: clientData.company_size || existingProfile?.company_size || "",
+            company_name:
+              clientData.company_name || existingProfile?.company_name || "",
+            company_size:
+              clientData.company_size || existingProfile?.company_size || "",
             industry: clientData.industry || existingProfile?.industry || "",
-            countryCode: clientData.countryCode || existingProfile?.countryCode || "+1",
+            countryCode:
+              clientData.countryCode || existingProfile?.countryCode || "+1",
             phone: clientData.phone || existingProfile?.phone || "",
             address: clientData.address || existingProfile?.address || "",
           };
@@ -112,7 +124,7 @@ const ProfileSetup = ({
           setFormData(firebaseData);
         }
       } catch (error) {
-        console.error('Error fetching client data:', error);
+        console.error("Error fetching client data:", error);
       }
     };
 
@@ -295,7 +307,15 @@ const ProfileSetup = ({
                 <div className="relative">
                   <input
                     type="text"
-                    value={showDropdown ? searchTerm : (countryCodes.find(c => c.code === formData.countryCode)?.flag + " " + formData.countryCode)}
+                    value={
+                      showDropdown
+                        ? searchTerm
+                        : countryCodes.find(
+                            (c) => c.code === formData.countryCode
+                          )?.flag +
+                          " " +
+                          formData.countryCode
+                    }
                     onChange={(e) => {
                       setSearchTerm(e.target.value);
                       setShowDropdown(true);
@@ -317,19 +337,28 @@ const ProfileSetup = ({
                           <div
                             key={country.code}
                             onClick={() => {
-                              setFormData({ ...formData, countryCode: country.code });
+                              setFormData({
+                                ...formData,
+                                countryCode: country.code,
+                              });
                               setSearchTerm("");
                               setShowDropdown(false);
                             }}
                             className="flex items-center p-2 hover:bg-gray-100 cursor-pointer text-sm border-b border-gray-100 last:border-b-0"
                           >
                             <span className="mr-2 text-lg">{country.flag}</span>
-                            <span className="mr-2 font-medium">{country.code}</span>
-                            <span className="text-gray-600">{country.name}</span>
+                            <span className="mr-2 font-medium">
+                              {country.code}
+                            </span>
+                            <span className="text-gray-600">
+                              {country.name}
+                            </span>
                           </div>
                         ))
                       ) : (
-                        <div className="p-2 text-sm text-gray-500">No countries found</div>
+                        <div className="p-2 text-sm text-gray-500">
+                          No countries found
+                        </div>
                       )}
                     </div>
                   )}

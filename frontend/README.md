@@ -11,6 +11,7 @@ A comprehensive survey management platform with multi-tenant architecture suppor
 ## 🏗️ Architecture
 
 ### Frontend (React + Vite)
+
 - **Framework**: React 18 with Vite
 - **UI Library**: Tailwind CSS + shadcn/ui components
 - **Authentication**: Firebase Auth
@@ -20,6 +21,7 @@ A comprehensive survey management platform with multi-tenant architecture suppor
 - **Responsive Design**: Works on desktop and mobile devices
 
 ### Backend (FastAPI)
+
 - **Framework**: FastAPI (Python)
 - **Authentication**: Firebase Admin SDK
 - **Database**: Firebase Firestore
@@ -31,6 +33,7 @@ A comprehensive survey management platform with multi-tenant architecture suppor
 ## 👥 User Roles
 
 ### SuperAdmin
+
 - Create and manage Client Admins
 - View all client statistics and data
 - Manage system-wide settings
@@ -39,6 +42,7 @@ A comprehensive survey management platform with multi-tenant architecture suppor
 - Automatic user deactivation when client is deactivated
 
 ### Client Admin
+
 - Create and manage end users
 - Design surveys and questions
 - Assign surveys to users
@@ -48,6 +52,7 @@ A comprehensive survey management platform with multi-tenant architecture suppor
 - Duplicate prevention system
 
 ### End User (Mobile)
+
 - Receive survey assignments
 - Complete assigned surveys
 - View survey history
@@ -56,6 +61,7 @@ A comprehensive survey management platform with multi-tenant architecture suppor
 ## 🛠️ Tech Stack
 
 **Frontend:**
+
 - React 18
 - Vite
 - Tailwind CSS
@@ -65,6 +71,7 @@ A comprehensive survey management platform with multi-tenant architecture suppor
 - Lucide React Icons
 
 **Backend:**
+
 - FastAPI
 - Python 3.9
 - Firebase Admin SDK
@@ -72,10 +79,12 @@ A comprehensive survey management platform with multi-tenant architecture suppor
 - Uvicorn
 
 **Database & Auth:**
+
 - Firebase Firestore
 - Firebase Authentication
 
 **Deployment:**
+
 - Frontend: Netlify
 - Backend: Render (Docker)
 
@@ -112,6 +121,7 @@ npm run dev
 ```
 
 Update `src/firebase.js` with your Firebase configuration:
+
 ```javascript
 const firebaseConfig = {
   apiKey: "your-api-key",
@@ -134,18 +144,21 @@ uvicorn main:app --reload
 ### 5. Run the Application
 
 **Terminal 1 - Backend:**
+
 ```bash
 cd backend
 uvicorn main:app --reload
 ```
 
 **Terminal 2 - Frontend:**
+
 ```bash
 cd frontend
 npm run dev
 ```
 
 The application will be available at:
+
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
@@ -153,6 +166,7 @@ The application will be available at:
 ## 🔧 Environment Variables
 
 ### Backend (.env)
+
 ```env
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_PRIVATE_KEY=your-private-key
@@ -165,6 +179,7 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
 ### Frontend (.env)
+
 ```env
 VITE_FIREBASE_API_KEY=your-api-key
 VITE_FIREBASE_AUTH_DOMAIN=your-auth-domain
@@ -208,6 +223,7 @@ v-survey-react-app/
 ## 📊 Features
 
 ### SuperAdmin Dashboard
+
 - Client management (create, edit, delete, activate/deactivate)
 - Real-time client status monitoring
 - System-wide analytics
@@ -216,6 +232,7 @@ v-survey-react-app/
 - Client details modal with user/survey statistics
 
 ### Client Admin Dashboard
+
 - User management with status tracking
 - Survey builder with multiple question types
 - Survey assignment system with duplicate prevention
@@ -224,6 +241,7 @@ v-survey-react-app/
 - Real-time data synchronization
 
 ### Survey Management
+
 - Multiple question types (text, multiple choice, rating, yes/no)
 - Survey assignment to specific users
 - Real-time response tracking
@@ -233,31 +251,37 @@ v-survey-react-app/
 ## 🔧 API Endpoints
 
 ### Authentication
+
 - `POST /api/auth/login` - User login
 - `DELETE /api/users/{uid}/auth` - Delete user from Firebase Auth
 
 ### Users
+
 - `GET /api/users` - List users (paginated)
 - `POST /api/users` - Create user
 - `PUT /api/users/{id}` - Update user
 - `DELETE /api/users/{id}` - Delete user
 
 ### Surveys
+
 - `GET /api/surveys` - List surveys
 - `POST /api/surveys` - Create survey
 - `GET /api/surveys/{id}` - Get survey details
 - `PUT /api/surveys/{id}` - Update survey
 
 ### Questions
+
 - `GET /api/questions` - List questions
 - `POST /api/questions` - Create question
 - `PUT /api/questions/{id}` - Update question
 
 ### Assignments
+
 - `GET /api/assignments/` - List survey assignments
 - `POST /api/assignments/` - Create survey assignment
 
 **Authentication**: All API endpoints require Firebase JWT token in the Authorization header:
+
 ```
 Authorization: Bearer <firebase-jwt-token>
 ```
@@ -266,16 +290,17 @@ Authorization: Bearer <firebase-jwt-token>
 
 ### Collections in Firestore
 
-1. **superadmin/U0UjGVvDJoDbLtWAhyjp/clients** - Client admin profiles
+1. **superadmin/u1JiUOCTXxaOkoK83AFH/clients** - Client admin profiles
 2. **users** - Survey participants (global collection)
-3. **superadmin/U0UjGVvDJoDbLtWAhyjp/clients/{clientId}/questions** - Survey questions
-4. **superadmin/U0UjGVvDJoDbLtWAhyjp/clients/{clientId}/surveys** - Survey definitions
-5. **superadmin/U0UjGVvDJoDbLtWAhyjp/clients/{clientId}/assignments** - Survey assignments
+3. **superadmin/u1JiUOCTXxaOkoK83AFH/clients/{clientId}/questions** - Survey questions
+4. **superadmin/u1JiUOCTXxaOkoK83AFH/clients/{clientId}/surveys** - Survey definitions
+5. **superadmin/u1JiUOCTXxaOkoK83AFH/clients/{clientId}/assignments** - Survey assignments
 6. **survey_responses** - User responses (future feature)
 
 ## 🚀 Deployment
 
 ### Frontend (Netlify)
+
 ```bash
 # Build command
 npm run build
@@ -288,11 +313,13 @@ frontend
 ```
 
 ### Backend (Render)
+
 - **Environment**: Docker
 - **Build Command**: `pip install -r requirements.txt`
 - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 
 ### Backend Deployment (Google Cloud Run)
+
 ```bash
 # Build and deploy
 gcloud run deploy survey-api --source .
@@ -318,12 +345,14 @@ gcloud run deploy survey-api --source .
 ## 🧪 Testing
 
 ### Backend Testing
+
 ```bash
 cd backend
 pytest  # After implementing tests
 ```
 
 ### Frontend Testing
+
 ```bash
 cd frontend
 npm test  # After implementing tests
@@ -366,11 +395,13 @@ npm test  # After implementing tests
 ### Development Guidelines
 
 #### Code Style
+
 - **Frontend**: Use ESLint and Prettier
 - **Backend**: Follow PEP 8 Python style guide
 - **Commits**: Use conventional commit messages
 
 #### File Structure
+
 - Keep components small and focused
 - Use custom hooks for API logic
 - Separate business logic into services
@@ -392,6 +423,7 @@ This project is licensed under the MIT License.
 ## 🆘 Support
 
 For support and questions:
+
 - Create an issue in the repository
 - Check the API documentation at `/docs` endpoint
 - Review the troubleshooting section above

@@ -8,7 +8,7 @@ from typing import List, Optional
 import uvicorn
 
 from models.database import init_firebase
-from routers import users, questions, surveys, assignments
+from routers import users, questions, surveys, assignments, deletion
 from firebase_admin import auth as firebase_auth
 from middleware.auth import verify_firebase_token, get_current_user_email
 
@@ -47,6 +47,7 @@ app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(questions.router, prefix="/api/questions", tags=["questions"])
 app.include_router(surveys.router, prefix="/api/surveys", tags=["surveys"])
 app.include_router(assignments.router, prefix="/api/assignments", tags=["assignments"])
+app.include_router(deletion.router, prefix="/api/delete", tags=["deletion"])
 
 @app.get("/api/test-user/{user_id}")
 async def test_user_exists(user_id: str):

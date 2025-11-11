@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart3, Users, ChevronDown, ChevronUp, Building } from "lucide-react";
+import {
+  BarChart3,
+  Users,
+  ChevronDown,
+  ChevronUp,
+  Building,
+} from "lucide-react";
 import { db } from "../../../firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 
@@ -20,40 +26,61 @@ const SurveyResults = () => {
   const loadClients = async () => {
     try {
       setLoading(true);
-      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+      const clientsRef = collection(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients"
+      );
       const snapshot = await getDocs(clientsRef);
       const clientsList = [];
       let surveysCount = 0;
       let responsesCount = 0;
-      
+
       for (const doc of snapshot.docs) {
         const clientData = doc.data();
-        
+
         // Get surveys count for this client
-        const surveysRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", doc.id, "surveys");
+        const surveysRef = collection(
+          db,
+          "superadmin",
+          "u1JiUOCTXxaOkoK83AFH",
+          "clients",
+          doc.id,
+          "surveys"
+        );
         const surveysSnapshot = await getDocs(surveysRef);
         const clientSurveysCount = surveysSnapshot.size;
-        
+
         // Get actual responses count for this client by counting all survey responses
         let clientResponsesCount = 0;
         for (const surveyDoc of surveysSnapshot.docs) {
-          const surveyResponsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", doc.id, "surveys", surveyDoc.id, "responses");
+          const surveyResponsesRef = collection(
+            db,
+            "superadmin",
+            "u1JiUOCTXxaOkoK83AFH",
+            "clients",
+            doc.id,
+            "surveys",
+            surveyDoc.id,
+            "responses"
+          );
           const surveyResponsesSnapshot = await getDocs(surveyResponsesRef);
           clientResponsesCount += surveyResponsesSnapshot.size;
         }
-        
+
         surveysCount += clientSurveysCount;
         responsesCount += clientResponsesCount;
-        
+
         clientsList.push({
           id: doc.id,
           name: clientData.name || clientData.email,
           email: clientData.email,
           surveysCount: clientSurveysCount,
-          responsesCount: clientResponsesCount
+          responsesCount: clientResponsesCount,
         });
       }
-      
+
       setClients(clientsList);
       setTotalSurveys(surveysCount);
       setTotalResponses(responsesCount);
@@ -69,34 +96,50 @@ const SurveyResults = () => {
       setExpandedClient(null);
     } else {
       setExpandedClient(clientId);
-      
+
       // Load surveys for this client if not already loaded
       if (!clientSurveys[clientId]) {
         try {
-          const surveysRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys");
+          const surveysRef = collection(
+            db,
+            "superadmin",
+            "u1JiUOCTXxaOkoK83AFH",
+            "clients",
+            clientId,
+            "surveys"
+          );
           const surveysSnapshot = await getDocs(surveysRef);
           const surveys = [];
-          
+
           for (const surveyDoc of surveysSnapshot.docs) {
             const surveyData = surveyDoc.data();
-            
+
             // Get actual response count for this survey
-            const surveyResponsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyDoc.id, "responses");
+            const surveyResponsesRef = collection(
+              db,
+              "superadmin",
+              "u1JiUOCTXxaOkoK83AFH",
+              "clients",
+              clientId,
+              "surveys",
+              surveyDoc.id,
+              "responses"
+            );
             const surveyResponsesSnapshot = await getDocs(surveyResponsesRef);
             const surveyResponseCount = surveyResponsesSnapshot.size;
-            
+
             surveys.push({
               id: surveyDoc.id,
               name: surveyData.name,
               questionCount: surveyData.questionCount || 0,
               responses: surveyResponseCount,
-              createdAt: surveyData.createdAt
+              createdAt: surveyData.createdAt,
             });
           }
-          
-          setClientSurveys(prev => ({
+
+          setClientSurveys((prev) => ({
             ...prev,
-            [clientId]: surveys
+            [clientId]: surveys,
           }));
         } catch (error) {
           console.error("Error loading client surveys:", error);
@@ -121,7 +164,9 @@ const SurveyResults = () => {
       <div className="max-w-7xl mx-auto p-4 sm:p-6">
         {/* Header */}
         <div className="mb-4 sm:mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Survey Results</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            Survey Results
+          </h1>
           <p className="text-gray-600 mt-2 text-sm sm:text-base">
             View and analyze survey responses from all clients
           </p>
@@ -175,7 +220,7 @@ const SurveyResults = () => {
               {clients.map((client) => {
                 const isExpanded = expandedClient === client.id;
                 const surveys = clientSurveys[client.id] || [];
-                
+
                 return (
                   <Card key={client.id} className="overflow-hidden">
                     <CardContent className="p-4 sm:p-6">
@@ -203,11 +248,15 @@ const SurveyResults = () => {
                           )}
                         </Button>
                       </div>
-                      
+
                       {/* Expanded Surveys */}
-                      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                        isExpanded ? 'max-h-screen opacity-100 mt-4 sm:mt-6' : 'max-h-0 opacity-0'
-                      }`}>
+                      <div
+                        className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                          isExpanded
+                            ? "max-h-screen opacity-100 mt-4 sm:mt-6"
+                            : "max-h-0 opacity-0"
+                        }`}
+                      >
                         <div className="border-t pt-4 sm:pt-6">
                           <h4 className="font-semibold mb-3 text-sm sm:text-base">
                             Surveys by {client.name}
@@ -215,16 +264,28 @@ const SurveyResults = () => {
                           {surveys.length > 0 ? (
                             <div className="space-y-3">
                               {surveys.map((survey) => (
-                                <div key={survey.id} className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+                                <div
+                                  key={survey.id}
+                                  className="bg-gray-50 p-3 sm:p-4 rounded-lg"
+                                >
                                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
                                     <div className="flex-1">
                                       <h5 className="font-medium text-gray-900 text-sm sm:text-base">
                                         {survey.name}
                                       </h5>
                                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-1 text-xs sm:text-sm text-gray-600">
-                                        <span>Questions: {survey.questionCount}</span>
-                                        <span className="hidden sm:inline">•</span>
-                                        <span>Created: {new Date(survey.createdAt).toLocaleDateString()}</span>
+                                        <span>
+                                          Questions: {survey.questionCount}
+                                        </span>
+                                        <span className="hidden sm:inline">
+                                          •
+                                        </span>
+                                        <span>
+                                          Created:{" "}
+                                          {new Date(
+                                            survey.createdAt
+                                          ).toLocaleDateString()}
+                                        </span>
                                       </div>
                                     </div>
                                     <div className="text-right">
@@ -237,7 +298,9 @@ const SurveyResults = () => {
                               ))}
                             </div>
                           ) : (
-                            <p className="text-gray-500 text-sm">No surveys found for this client</p>
+                            <p className="text-gray-500 text-sm">
+                              No surveys found for this client
+                            </p>
                           )}
                         </div>
                       </div>
@@ -248,7 +311,9 @@ const SurveyResults = () => {
               {clients.length === 0 && (
                 <div className="text-center py-8">
                   <Building className="w-10 h-10 sm:w-12 sm:h-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 text-sm sm:text-base">No clients found</p>
+                  <p className="text-gray-500 text-sm sm:text-base">
+                    No clients found
+                  </p>
                 </div>
               )}
             </div>

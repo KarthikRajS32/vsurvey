@@ -1,103 +1,52 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if user is authenticated
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    // Helper function to check if user owns the resource
-    function isOwner(email) {
-      return isAuthenticated() && request.auth.token.email == email;
-    }
-    
-    // Helper function to check if user is a client admin
-    function isClientAdmin() {
-      return isAuthenticated() && 
-             exists(/databases/$(database)/documents/superadmin/U0UjGVvDJoDbLtWAhyjp/clients/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/superadmin/U0UjGVvDJoDbLtWAhyjp/clients/$(request.auth.uid)).data.status == 'active';
-    }
-    
-    // SuperAdmin collection - only specific superadmin can access
+    // SuperAdmin collection - only superadmin can access
     match /superadmin/{superadminId} {
-      allow read, write: if isAuthenticated() && 
-                           request.auth.token.email == 'superadmin@vsurvey.com'; // Replace with actual superadmin email
+      allow read, write: if request.auth != null && request.auth.token.email == 'superadmin@vsurvey.com';
       
-      // Client admins subcollection
+      // Clients subcollection
       match /clients/{clientId} {
-        allow read, write: if isAuthenticated() && 
-                            (request.auth.token.email == 'superadmin@vsurvey.com' || // Superadmin access
-                             request.auth.uid == clientId); // Client can access their own data
+        allow read, write: if request.auth != null && 
+          (request.auth.token.email == 'superadmin@vsurvey.com' || 
+           request.auth.uid == clientId);
+        
+        // Client subcollections (surveys, questions, assignments)
+        match /{subcollection}/{docId} {
+          allow read, write: if request.auth != null && 
+            (request.auth.token.email == 'superadmin@vsurvey.com' || 
+             request.auth.uid == clientId);
+          
+          // Survey responses subcollection
+          match /responses/{responseId} {
+            allow read, write: if request.auth != null && 
+              (request.auth.token.email == 'superadmin@vsurvey.com' || 
+               request.auth.uid == clientId ||
+               resource.data.user_email == request.auth.token.email);
+          }
+        }
       }
     }
     
-    // Users collection - only client admins can manage their users
+    // Global users collection
     match /users/{userId} {
-      allow read, write: if isAuthenticated() && 
-                           (resource.data.created_by == request.auth.token.email || // Creator can access
-                            request.resource.data.created_by == request.auth.token.email); // For creation
-      allow delete: if isAuthenticated() && resource.data.created_by == request.auth.token.email;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.email == 'superadmin@vsurvey.com' ||
+         resource.data.created_by == request.auth.token.email ||
+         request.auth.uid == userId);
+      allow delete: if request.auth != null && 
+        (request.auth.token.email == 'superadmin@vsurvey.com' ||
+         resource.data.created_by == request.auth.token.email);
     }
     
-    // Questions collection - only client admins can manage their questions
-    match /questions/{questionId} {
-      allow read, write: if isAuthenticated() && 
-                           (resource.data.created_by == request.auth.token.email ||
-                            request.resource.data.created_by == request.auth.token.email);
-      allow delete: if isAuthenticated() && resource.data.created_by == request.auth.token.email;
-    }
-    
-    // Surveys collection - only client admins can manage their surveys
-    match /surveys/{surveyId} {
-      allow read, write: if isAuthenticated() && 
-                           (resource.data.created_by == request.auth.token.email ||
-                            request.resource.data.created_by == request.auth.token.email);
-      allow delete: if isAuthenticated() && resource.data.created_by == request.auth.token.email;
-    }
-    
-    // Survey questions mapping - only survey creator can manage
-    match /survey_questions/{mappingId} {
-      allow read, write: if isAuthenticated() && 
-                           (get(/databases/$(database)/documents/surveys/$(resource.data.survey_id)).data.created_by == request.auth.token.email ||
-                            get(/databases/$(database)/documents/surveys/$(request.resource.data.survey_id)).data.created_by == request.auth.token.email);
-      allow delete: if isAuthenticated() && 
-                      get(/databases/$(database)/documents/surveys/$(resource.data.survey_id)).data.created_by == request.auth.token.email;
-    }
-    
-    // Survey assignments - only survey creator can assign
-    match /survey_assignments/{assignmentId} {
-      allow read: if isAuthenticated() && 
-                    (get(/databases/$(database)/documents/surveys/$(resource.data.survey_id)).data.created_by == request.auth.token.email ||
-                     resource.data.user_id == request.auth.uid); // Users can see their assignments
-      allow write: if isAuthenticated() && 
-                     get(/databases/$(database)/documents/surveys/$(request.resource.data.survey_id)).data.created_by == request.auth.token.email;
-      allow delete: if isAuthenticated() && 
-                      get(/databases/$(database)/documents/surveys/$(resource.data.survey_id)).data.created_by == request.auth.token.email;
-    }
-    
-    // Survey responses - users can submit, admins can read
+    // Survey responses collection (if using global collection)
     match /survey_responses/{responseId} {
-      allow read: if isAuthenticated() && 
-                    (resource.data.user_id == request.auth.uid || // User can read their own responses
-                     get(/databases/$(database)/documents/surveys/$(resource.data.survey_id)).data.created_by == request.auth.token.email); // Survey creator can read
-      allow create: if isAuthenticated() && 
-                      request.resource.data.user_id == request.auth.uid; // Users can only create their own responses
-      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid; // Users can update their own responses
-      allow delete: if false; // No one can delete responses for audit purposes
-    }
-    
-    // Client admins collection - for profile management
-    match /client_admins/{adminId} {
-      allow read, write: if isAuthenticated() && 
-                           (request.auth.uid == adminId || // Admin can access their own profile
-                            request.auth.token.email == 'superadmin@vsurvey.com'); // Superadmin access
-    }
-    
-    // Test collection for connection testing (temporary)
-    match /_test/{document} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if request.auth != null && 
+        (request.auth.token.email == 'superadmin@vsurvey.com' ||
+         resource.data.user_email == request.auth.token.email ||
+         resource.data.client_email == request.auth.token.email);
     }
     
     // Deny all other access

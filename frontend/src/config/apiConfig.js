@@ -6,6 +6,7 @@ export const API_CONFIG = {
   QUESTIONS_URL: import.meta.env.VITE_API_BASE_URL + '/api/questions',
   SURVEYS_URL: import.meta.env.VITE_API_BASE_URL + '/api/surveys',
   ASSIGNMENTS_URL: import.meta.env.VITE_API_BASE_URL + '/api/assignments',
+  DELETE_URL: import.meta.env.VITE_API_BASE_URL + '/api/delete',
 };
 
 export default API_CONFIG;

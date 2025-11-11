@@ -19,7 +19,14 @@ import { Edit3, X, Trash2 } from "lucide-react";
 import { useQuestions } from "../../../hooks/useApi";
 import authService from "../../../services/authService";
 import { db, auth } from "../../../firebase";
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from "firebase/firestore";
 
 const CreateQuestionAPI = ({
   profile,
@@ -91,10 +98,15 @@ const CreateQuestionAPI = ({
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) return null;
-      
-      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+
+      const clientsRef = collection(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients"
+      );
       const snapshot = await getDocs(clientsRef);
-      
+
       let clientDocId = null;
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -102,7 +114,7 @@ const CreateQuestionAPI = ({
           clientDocId = doc.id;
         }
       });
-      
+
       return clientDocId;
     } catch (error) {
       console.error("Error getting client ID:", error);
@@ -114,18 +126,25 @@ const CreateQuestionAPI = ({
     try {
       const clientId = await getClientId();
       if (!clientId) {
-        console.error('No client ID found for current user');
+        console.error("No client ID found for current user");
         return;
       }
-      
-      console.log('Loading questions for clientId:', clientId);
-      const questionsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions");
+
+      console.log("Loading questions for clientId:", clientId);
+      const questionsRef = collection(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients",
+        clientId,
+        "questions"
+      );
       const snapshot = await getDocs(questionsRef);
       const fbQuestions = [];
       snapshot.forEach((doc) => {
         fbQuestions.push({
           id: doc.id,
-          ...doc.data()
+          ...doc.data(),
         });
       });
       setFirebaseQuestions(fbQuestions);
@@ -185,13 +204,23 @@ const CreateQuestionAPI = ({
       // Save to Firebase in client-specific collection
       const clientId = await getClientId();
       if (!clientId) {
-        throw new Error('No client ID found for current user');
+        throw new Error("No client ID found for current user");
       }
-      
-      console.log('Saving question for clientId:', clientId);
-      const questionsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions");
+
+      console.log("Saving question for clientId:", clientId);
+      const questionsRef = collection(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients",
+        clientId,
+        "questions"
+      );
       await addDoc(questionsRef, questionData);
-      console.log("Question saved to Firebase successfully for client:", clientId);
+      console.log(
+        "Question saved to Firebase successfully for client:",
+        clientId
+      );
 
       // Also save to backend API
       await createQuestion(questionData);
@@ -203,7 +232,7 @@ const CreateQuestionAPI = ({
       setOptions([""]);
       setMessage("Question created successfully!");
       setTimeout(() => setMessage(""), 3000);
-      
+
       // Refresh Firebase questions list
       await loadFirebaseQuestions();
     } catch (err) {
@@ -219,7 +248,7 @@ const CreateQuestionAPI = ({
       text: question.text,
       type: question.type,
       options: question.options || [],
-      ratingScale: question.ratingScale || '1-5',
+      ratingScale: question.ratingScale || "1-5",
     });
     setIsEditModalOpen(true);
   };
@@ -231,44 +260,58 @@ const CreateQuestionAPI = ({
       // Update in Firebase
       const clientId = await getClientId();
       if (!clientId) {
-        throw new Error('No client ID found for current user');
+        throw new Error("No client ID found for current user");
       }
-      
-      const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", editingQuestion.id);
+
+      const questionRef = doc(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients",
+        clientId,
+        "questions",
+        editingQuestion.id
+      );
       const updateData = {
         text: editFormData.text,
         type: editFormData.type,
-        options: editFormData.type === "multiple_choice" 
-          ? (editFormData.options || []).filter(opt => {
-              const text = typeof opt === 'string' ? opt : (opt?.text || '');
-              return text && text.trim();
-            }).map((opt, index) => ({
-              id: `opt_${Date.now()}_${index}`,
-              text: typeof opt === 'string' ? opt.trim() : (opt?.text?.trim() || ''),
-              order: index,
-            }))
-          : [],
+        options:
+          editFormData.type === "multiple_choice"
+            ? (editFormData.options || [])
+                .filter((opt) => {
+                  const text = typeof opt === "string" ? opt : opt?.text || "";
+                  return text && text.trim();
+                })
+                .map((opt, index) => ({
+                  id: `opt_${Date.now()}_${index}`,
+                  text:
+                    typeof opt === "string"
+                      ? opt.trim()
+                      : opt?.text?.trim() || "",
+                  order: index,
+                }))
+            : [],
         updatedAt: new Date().toISOString(),
       };
 
       // Handle rating scale - add if rating type, remove if not
       if (editFormData.type === "rating") {
-        updateData.ratingScale = editFormData.ratingScale || '1-5';
+        updateData.ratingScale = editFormData.ratingScale || "1-5";
       } else if (editingQuestion.ratingScale) {
         // Use Firebase's deleteField() to completely remove the field
-        const { deleteField } = await import('firebase/firestore');
+        const { deleteField } = await import("firebase/firestore");
         updateData.ratingScale = deleteField();
       }
       await updateDoc(questionRef, updateData);
 
       // Also update backend API
       await updateQuestion(editingQuestion.id, editFormData);
-      
+
       setIsEditModalOpen(false);
       setEditingQuestion(null);
       setMessage("Question updated successfully!");
       setTimeout(() => setMessage(""), 3000);
-      
+
       // Refresh Firebase questions list
       await loadFirebaseQuestions();
     } catch (err) {
@@ -287,42 +330,72 @@ const CreateQuestionAPI = ({
       try {
         const clientId = await getClientId();
         if (!clientId) {
-          throw new Error('No client ID found for current user');
+          throw new Error("No client ID found for current user");
         }
-        
+
         // Remove question from all surveys first
-        const surveysRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys");
+        const surveysRef = collection(
+          db,
+          "superadmin",
+          "u1JiUOCTXxaOkoK83AFH",
+          "clients",
+          clientId,
+          "surveys"
+        );
         const surveysSnapshot = await getDocs(surveysRef);
-        
+
         const updatePromises = [];
         surveysSnapshot.forEach((surveyDoc) => {
           const surveyData = surveyDoc.data();
-          if (surveyData.questions && surveyData.questions.includes(questionToDelete.id)) {
-            const updatedQuestions = surveyData.questions.filter(qId => qId !== questionToDelete.id);
-            const surveyRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyDoc.id);
+          if (
+            surveyData.questions &&
+            surveyData.questions.includes(questionToDelete.id)
+          ) {
+            const updatedQuestions = surveyData.questions.filter(
+              (qId) => qId !== questionToDelete.id
+            );
+            const surveyRef = doc(
+              db,
+              "superadmin",
+              "u1JiUOCTXxaOkoK83AFH",
+              "clients",
+              clientId,
+              "surveys",
+              surveyDoc.id
+            );
             updatePromises.push(
               updateDoc(surveyRef, {
                 questions: updatedQuestions,
                 questionCount: updatedQuestions.length,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
               })
             );
           }
         });
-        
+
         // Wait for all survey updates to complete
         await Promise.all(updatePromises);
-        
+
         // Delete from Firebase
-        const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", questionToDelete.id);
+        const questionRef = doc(
+          db,
+          "superadmin",
+          "u1JiUOCTXxaOkoK83AFH",
+          "clients",
+          clientId,
+          "questions",
+          questionToDelete.id
+        );
         await deleteDoc(questionRef);
-        
+
         // Also delete from backend API
         await deleteQuestion(questionToDelete.id);
-        
-        setMessage(`Question deleted successfully! Removed from ${updatePromises.length} survey(s).`);
+
+        setMessage(
+          `Question deleted successfully! Removed from ${updatePromises.length} survey(s).`
+        );
         setTimeout(() => setMessage(""), 3000);
-        
+
         // Refresh Firebase questions list
         await loadFirebaseQuestions();
       } catch (err) {
@@ -431,17 +504,23 @@ const CreateQuestionAPI = ({
                   >
                     Add Option
                   </Button>
-                  
+
                   {/* Preview */}
                   <div className="mt-4 p-3 bg-gray-50 rounded border">
                     <Label className="text-sm font-medium">Preview:</Label>
                     <div className="mt-2 space-y-2">
-                      {options.filter(opt => opt.trim()).map((option, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <input type="checkbox" className="w-4 h-4" disabled />
-                          <span className="text-sm">{option}</span>
-                        </div>
-                      ))}
+                      {options
+                        .filter((opt) => opt.trim())
+                        .map((option, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4"
+                              disabled
+                            />
+                            <span className="text-sm">{option}</span>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 </div>
@@ -459,14 +538,19 @@ const CreateQuestionAPI = ({
                     <option value="1-5">1-5 Scale</option>
                     <option value="1-10">1-10 Scale</option>
                   </select>
-                  
+
                   {/* Preview */}
                   <div className="mt-4 p-3 bg-gray-50 rounded border">
                     <Label className="text-sm font-medium">Preview:</Label>
                     <div className="mt-2 flex gap-1">
-                      {Array.from({ length: parseInt(ratingScale.split('-')[1]) }, (_, i) => (
-                        <span key={i} className="text-yellow-400 text-xl">★</span>
-                      ))}
+                      {Array.from(
+                        { length: parseInt(ratingScale.split("-")[1]) },
+                        (_, i) => (
+                          <span key={i} className="text-yellow-400 text-xl">
+                            ★
+                          </span>
+                        )
+                      )}
                     </div>
                   </div>
                 </div>
@@ -477,18 +561,32 @@ const CreateQuestionAPI = ({
                   <Label className="text-sm font-medium">Preview:</Label>
                   <div className="mt-2 space-y-2">
                     <div className="flex items-center gap-2">
-                      <input type="radio" name="preview" className="w-4 h-4" disabled />
+                      <input
+                        type="radio"
+                        name="preview"
+                        className="w-4 h-4"
+                        disabled
+                      />
                       <span className="text-sm">Yes</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="radio" name="preview" className="w-4 h-4" disabled />
+                      <input
+                        type="radio"
+                        name="preview"
+                        className="w-4 h-4"
+                        disabled
+                      />
                       <span className="text-sm">No</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              <Button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700">
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
+              >
                 Create Question
               </Button>
             </form>
@@ -496,50 +594,62 @@ const CreateQuestionAPI = ({
 
           {/* Questions List */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Available Questions ({firebaseQuestions.length})</h2>
+            <h2 className="text-xl font-semibold mb-4">
+              Available Questions ({firebaseQuestions.length})
+            </h2>
 
             {loading && <p>Loading questions...</p>}
             {error && <p className="text-red-600">Error: {error}</p>}
 
             <div className="space-y-4 max-h-96 overflow-y-auto">
-              {firebaseQuestions.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).map((question) => (
-                <div key={question.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <p className="font-medium">{question.text}</p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Type: {question.type}
-                      </p>
-                      {question.options && question.options.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-sm text-gray-600">Options:</p>
-                          <ul className="text-sm text-gray-700 ml-4">
-                            {question.options.map((option, idx) => (
-                              <li key={idx}>• {typeof option === 'string' ? option : option.text}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 ml-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(question)}
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openDeleteModal(question)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+              {firebaseQuestions
+                .sort(
+                  (a, b) =>
+                    new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+                )
+                .map((question) => (
+                  <div key={question.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="font-medium">{question.text}</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Type: {question.type}
+                        </p>
+                        {question.options && question.options.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-sm text-gray-600">Options:</p>
+                            <ul className="text-sm text-gray-700 ml-4">
+                              {question.options.map((option, idx) => (
+                                <li key={idx}>
+                                  •{" "}
+                                  {typeof option === "string"
+                                    ? option
+                                    : option.text}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 ml-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEdit(question)}
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openDeleteModal(question)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         </div>
@@ -563,14 +673,23 @@ const CreateQuestionAPI = ({
                 required
               />
             </div>
-            
+
             <div>
               <Label htmlFor="editResponseType">Response Type</Label>
               <select
                 id="editResponseType"
                 className="w-full p-3 border text-sm rounded-[5px] border-gray-400 focus:outline-none focus:ring-1 focus:ring-black"
                 value={editFormData.type}
-                onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value, options: e.target.value === 'multiple_choice' ? editFormData.options : [] })}
+                onChange={(e) =>
+                  setEditFormData({
+                    ...editFormData,
+                    type: e.target.value,
+                    options:
+                      e.target.value === "multiple_choice"
+                        ? editFormData.options
+                        : [],
+                  })
+                }
                 required
               >
                 <option value="">Select response type</option>
@@ -584,25 +703,35 @@ const CreateQuestionAPI = ({
             {editFormData.type === "multiple_choice" && (
               <div>
                 <Label>Options</Label>
-                {(editFormData.options || ['']).map((option, index) => (
+                {(editFormData.options || [""]).map((option, index) => (
                   <div key={index} className="flex gap-2 mt-2">
                     <Input
-                      value={typeof option === 'string' ? option : option.text || ''}
+                      value={
+                        typeof option === "string" ? option : option.text || ""
+                      }
                       onChange={(e) => {
-                        const newOptions = [...(editFormData.options || [''])];
+                        const newOptions = [...(editFormData.options || [""])];
                         newOptions[index] = e.target.value;
-                        setEditFormData({ ...editFormData, options: newOptions });
+                        setEditFormData({
+                          ...editFormData,
+                          options: newOptions,
+                        });
                       }}
                       placeholder={`Option ${index + 1}`}
                     />
-                    {(editFormData.options || ['']).length > 1 && (
+                    {(editFormData.options || [""]).length > 1 && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          const newOptions = (editFormData.options || ['']).filter((_, i) => i !== index);
-                          setEditFormData({ ...editFormData, options: newOptions });
+                          const newOptions = (
+                            editFormData.options || [""]
+                          ).filter((_, i) => i !== index);
+                          setEditFormData({
+                            ...editFormData,
+                            options: newOptions,
+                          });
                         }}
                       >
                         <X className="w-4 h-4" />
@@ -615,27 +744,32 @@ const CreateQuestionAPI = ({
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const newOptions = [...(editFormData.options || ['']), ''];
+                    const newOptions = [...(editFormData.options || [""]), ""];
                     setEditFormData({ ...editFormData, options: newOptions });
                   }}
                   className="mt-2"
                 >
                   Add Option
                 </Button>
-                
+
                 {/* Preview */}
                 <div className="mt-4 p-3 bg-gray-50 rounded border">
                   <Label className="text-sm font-medium">Preview:</Label>
                   <div className="mt-2 space-y-2">
-                    {(editFormData.options || []).filter(opt => {
-                      const text = typeof opt === 'string' ? opt : opt.text || '';
-                      return text.trim();
-                    }).map((option, index) => (
-                      <div key={index} className="flex items-center gap-2">
-                        <input type="checkbox" className="w-4 h-4" disabled />
-                        <span className="text-sm">{typeof option === 'string' ? option : option.text}</span>
-                      </div>
-                    ))}
+                    {(editFormData.options || [])
+                      .filter((opt) => {
+                        const text =
+                          typeof opt === "string" ? opt : opt.text || "";
+                        return text.trim();
+                      })
+                      .map((option, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input type="checkbox" className="w-4 h-4" disabled />
+                          <span className="text-sm">
+                            {typeof option === "string" ? option : option.text}
+                          </span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               </div>
@@ -646,21 +780,35 @@ const CreateQuestionAPI = ({
                 <Label>Rating Scale</Label>
                 <select
                   className="w-full p-3 border text-sm rounded-[5px] border-gray-400 focus:outline-none focus:ring-1 focus:ring-black mt-2"
-                  value={editFormData.ratingScale || '1-5'}
-                  onChange={(e) => setEditFormData({ ...editFormData, ratingScale: e.target.value })}
+                  value={editFormData.ratingScale || "1-5"}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      ratingScale: e.target.value,
+                    })
+                  }
                 >
                   <option value="1-3">1-3 Scale</option>
                   <option value="1-5">1-5 Scale</option>
                   <option value="1-10">1-10 Scale</option>
                 </select>
-                
+
                 {/* Preview */}
                 <div className="mt-4 p-3 bg-gray-50 rounded border">
                   <Label className="text-sm font-medium">Preview:</Label>
                   <div className="mt-2 flex gap-1">
-                    {Array.from({ length: parseInt((editFormData.ratingScale || '1-5').split('-')[1]) }, (_, i) => (
-                      <span key={i} className="text-yellow-400 text-xl">★</span>
-                    ))}
+                    {Array.from(
+                      {
+                        length: parseInt(
+                          (editFormData.ratingScale || "1-5").split("-")[1]
+                        ),
+                      },
+                      (_, i) => (
+                        <span key={i} className="text-yellow-400 text-xl">
+                          ★
+                        </span>
+                      )
+                    )}
                   </div>
                 </div>
               </div>
@@ -671,19 +819,33 @@ const CreateQuestionAPI = ({
                 <Label className="text-sm font-medium">Preview:</Label>
                 <div className="mt-2 space-y-2">
                   <div className="flex items-center gap-2">
-                    <input type="radio" name="editPreview" className="w-4 h-4" disabled />
+                    <input
+                      type="radio"
+                      name="editPreview"
+                      className="w-4 h-4"
+                      disabled
+                    />
                     <span className="text-sm">Yes</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <input type="radio" name="editPreview" className="w-4 h-4" disabled />
+                    <input
+                      type="radio"
+                      name="editPreview"
+                      className="w-4 h-4"
+                      disabled
+                    />
                     <span className="text-sm">No</span>
                   </div>
                 </div>
               </div>
             )}
-            
+
             <div className="flex gap-2">
-              <Button type="submit" disabled={loading} className="bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700">
+              <Button
+                type="submit"
+                disabled={loading}
+                className="bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
+              >
                 {loading ? "Updating..." : "Update Question"}
               </Button>
               <Button
@@ -705,18 +867,23 @@ const CreateQuestionAPI = ({
             <DialogTitle>Confirm Delete</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p>Are you sure you want to delete <strong>{questionToDelete?.text}</strong>?</p>
-            <p className="text-sm text-gray-600">This action cannot be undone.</p>
-            
+            <p>
+              Are you sure you want to delete{" "}
+              <strong>{questionToDelete?.text}</strong>?
+            </p>
+            <p className="text-sm text-gray-600">
+              This action cannot be undone.
+            </p>
+
             <div className="flex gap-2 pt-4">
-              <Button 
+              <Button
                 onClick={confirmDelete}
                 className="flex-1 bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
               >
                 Delete Question
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={cancelDelete}
                 className="flex-1"
               >

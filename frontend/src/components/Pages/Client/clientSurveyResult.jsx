@@ -2,10 +2,31 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-import { BarChart3, Users, Calendar, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  BarChart3,
+  Users,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { db, auth } from "../../../firebase";
-import { collection, getDocs, doc, getDoc, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  onSnapshot,
+} from "firebase/firestore";
 
 const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
   const [surveys, setSurveys] = useState([]);
@@ -31,16 +52,16 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
       );
       const data = await response.json();
-      
+
       if (data && data.display_name) {
         const location = data.display_name;
-        setLocationCache(prev => ({ ...prev, [cacheKey]: location }));
+        setLocationCache((prev) => ({ ...prev, [cacheKey]: location }));
         return location;
       }
     } catch (error) {
-      console.error('Error fetching location:', error);
+      console.error("Error fetching location:", error);
     }
-    
+
     return `${lat}, ${lng}`;
   };
 
@@ -49,7 +70,12 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
       const currentUser = auth.currentUser;
       if (!currentUser) return null;
 
-      const clientsRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients");
+      const clientsRef = collection(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients"
+      );
       const snapshot = await getDocs(clientsRef);
 
       let clientDocId = null;
@@ -69,11 +95,11 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
 
   useEffect(() => {
     setupRealTimeListeners();
-    
+
     return () => {
       // Cleanup all listeners on unmount
-      unsubscribers.forEach(unsubscribe => {
-        if (typeof unsubscribe === 'function') {
+      unsubscribers.forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") {
           unsubscribe();
         }
       });
@@ -86,39 +112,67 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
       if (!clientId) return;
 
       // Real-time listener for surveys
-      const surveysRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys");
+      const surveysRef = collection(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients",
+        clientId,
+        "surveys"
+      );
       const unsubscribeSurveys = onSnapshot(surveysRef, (snapshot) => {
         const surveysList = [];
         snapshot.forEach((doc) => {
           surveysList.push({
             id: doc.id,
-            ...doc.data()
+            ...doc.data(),
           });
         });
         setSurveys(surveysList);
-        
+
         // Setup response listeners for each survey
-        surveysList.forEach(survey => {
-          const responseUnsubscriber = setupResponseListener(survey.id, clientId);
-          setUnsubscribers(prev => [...prev, responseUnsubscriber]);
+        surveysList.forEach((survey) => {
+          const responseUnsubscriber = setupResponseListener(
+            survey.id,
+            clientId
+          );
+          setUnsubscribers((prev) => [...prev, responseUnsubscriber]);
         });
       });
 
-      setUnsubscribers(prev => [...prev, unsubscribeSurveys]);
+      setUnsubscribers((prev) => [...prev, unsubscribeSurveys]);
     } catch (error) {
       console.error("Error setting up real-time listeners:", error);
     }
   };
 
   const setupResponseListener = (surveyId, clientId) => {
-    const responsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyId, "responses");
-    
+    const responsesRef = collection(
+      db,
+      "superadmin",
+      "u1JiUOCTXxaOkoK83AFH",
+      "clients",
+      clientId,
+      "surveys",
+      surveyId,
+      "responses"
+    );
+
     return onSnapshot(responsesRef, async (snapshot) => {
       // Update total responses count across all surveys
       let total = 0;
       const allSurveys = surveys.length > 0 ? surveys : await loadSurveysOnce();
       for (const survey of allSurveys) {
-        const surveyResponsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", survey.id, "responses");
+        const surveyResponsesRef = collection(
+          db,
+          "superadmin",
+          "u1JiUOCTXxaOkoK83AFH",
+          "clients",
+          clientId,
+          "surveys",
+          survey.id,
+          "responses"
+        );
         const surveySnapshot = await getDocs(surveyResponsesRef);
         total += surveySnapshot.docs.length;
       }
@@ -134,14 +188,21 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
       const clientId = await getClientId();
       if (!clientId) return [];
 
-      const surveysRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys");
+      const surveysRef = collection(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients",
+        clientId,
+        "surveys"
+      );
       const snapshot = await getDocs(surveysRef);
       const surveysList = [];
 
       snapshot.forEach((doc) => {
         surveysList.push({
           id: doc.id,
-          ...doc.data()
+          ...doc.data(),
         });
       });
 
@@ -155,16 +216,25 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
   const loadSurveyResponses = async (surveyId, clientId) => {
     try {
       // Get responses and extract question IDs
-      const responsesRef = collection(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "surveys", surveyId, "responses");
+      const responsesRef = collection(
+        db,
+        "superadmin",
+        "u1JiUOCTXxaOkoK83AFH",
+        "clients",
+        clientId,
+        "surveys",
+        surveyId,
+        "responses"
+      );
       const responsesSnapshot = await getDocs(responsesRef);
       const questionIds = new Set();
       const questionsData = {};
-      
+
       // Extract all question IDs from responses
       responsesSnapshot.forEach((doc) => {
         const data = doc.data();
         if (data.answers) {
-          Object.keys(data.answers).forEach(questionId => {
+          Object.keys(data.answers).forEach((questionId) => {
             questionIds.add(questionId);
           });
         }
@@ -173,20 +243,32 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
       // Fetch question details
       for (const questionId of questionIds) {
         try {
-          const questionRef = doc(db, "superadmin", "U0UjGVvDJoDbLtWAhyjp", "clients", clientId, "questions", questionId);
+          const questionRef = doc(
+            db,
+            "superadmin",
+            "u1JiUOCTXxaOkoK83AFH",
+            "clients",
+            clientId,
+            "questions",
+            questionId
+          );
           const questionDoc = await getDoc(questionRef);
           if (questionDoc.exists()) {
             const questionData = questionDoc.data();
-            questionsData[questionId] = questionData.question_text || questionData.text || questionData.question || `Question ${questionId}`;
+            questionsData[questionId] =
+              questionData.question_text ||
+              questionData.text ||
+              questionData.question ||
+              `Question ${questionId}`;
           }
         } catch (err) {
           console.error("Error fetching question:", err);
         }
       }
 
-      setSurveyQuestions(prev => ({
+      setSurveyQuestions((prev) => ({
         ...prev,
-        [surveyId]: questionsData
+        [surveyId]: questionsData,
       }));
 
       const responses = [];
@@ -195,14 +277,14 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
         const responseData = responseDoc.data();
 
         // Fetch user name using userId
-        let userName = 'N/A';
+        let userName = "N/A";
         if (responseData.userId) {
           try {
             const userRef = doc(db, "users", responseData.userId);
             const userDoc = await getDoc(userRef);
             if (userDoc.exists()) {
               const userData = userDoc.data();
-              userName = userData.full_name || userData.name || 'N/A';
+              userName = userData.full_name || userData.name || "N/A";
             }
           } catch (err) {
             console.error("Error fetching user:", err);
@@ -210,13 +292,17 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
         }
 
         // Format timestamp
-        let formattedDate = 'N/A';
+        let formattedDate = "N/A";
         if (responseData.submittedAt) {
           try {
             if (responseData.submittedAt.toDate) {
-              formattedDate = responseData.submittedAt.toDate().toLocaleString();
+              formattedDate = responseData.submittedAt
+                .toDate()
+                .toLocaleString();
             } else {
-              formattedDate = new Date(responseData.submittedAt).toLocaleString();
+              formattedDate = new Date(
+                responseData.submittedAt
+              ).toLocaleString();
             }
           } catch (err) {
             console.error("Error formatting date:", err);
@@ -224,9 +310,16 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
         }
 
         // Convert geoCode to location name
-        let locationName = 'N/A';
-        if (responseData.geoCode && responseData.geoCode._lat && responseData.geoCode._long) {
-          locationName = await getLocationName(responseData.geoCode._lat, responseData.geoCode._long);
+        let locationName = "N/A";
+        if (
+          responseData.geoCode &&
+          responseData.geoCode._lat &&
+          responseData.geoCode._long
+        ) {
+          locationName = await getLocationName(
+            responseData.geoCode._lat,
+            responseData.geoCode._long
+          );
         }
 
         responses.push({
@@ -234,13 +327,13 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
           ...responseData,
           userName: userName,
           formattedSubmittedAt: formattedDate,
-          locationName: locationName
+          locationName: locationName,
         });
       }
 
-      setSurveyResponses(prev => ({
+      setSurveyResponses((prev) => ({
         ...prev,
-        [surveyId]: responses
+        [surveyId]: responses,
       }));
     } catch (error) {
       console.error("Error loading survey responses:", error);
@@ -267,7 +360,9 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Survey Results</h1>
-          <p className="text-gray-600 mt-2">View and analyze survey responses</p>
+          <p className="text-gray-600 mt-2">
+            View and analyze survey responses
+          </p>
         </div>
 
         {/* Summary Cards */}
@@ -276,8 +371,12 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Surveys</p>
-                  <p className="text-3xl font-bold text-blue-600">{surveys.length}</p>
+                  <p className="text-sm font-medium text-gray-600">
+                    Total Surveys
+                  </p>
+                  <p className="text-3xl font-bold text-blue-600">
+                    {surveys.length}
+                  </p>
                 </div>
                 <BarChart3 className="w-8 h-8 text-blue-500" />
               </div>
@@ -288,8 +387,12 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Responses</p>
-                  <p className="text-3xl font-bold text-green-600">{totalResponses}</p>
+                  <p className="text-sm font-medium text-gray-600">
+                    Total Responses
+                  </p>
+                  <p className="text-3xl font-bold text-green-600">
+                    {totalResponses}
+                  </p>
                 </div>
                 <Users className="w-8 h-8 text-green-500" />
               </div>
@@ -308,77 +411,97 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
                 const allResponses = surveyResponses[survey.id] || [];
                 const questions = surveyQuestions[survey.id] || {};
                 const questionIds = Object.keys(questions);
-                
+
                 // Apply filters
-                const filteredResponses = allResponses.filter(response => {
+                const filteredResponses = allResponses.filter((response) => {
                   const surveyFilters = filters[survey.id] || {};
                   return (
-                    (!surveyFilters.area || response.area === surveyFilters.area) &&
-                    (!surveyFilters.boothNumber || response.boothNumber === surveyFilters.boothNumber) &&
-                    (!surveyFilters.constitution || response.constitution === surveyFilters.constitution) &&
-                    (!surveyFilters.userName || response.userName === surveyFilters.userName)
+                    (!surveyFilters.area ||
+                      response.area === surveyFilters.area) &&
+                    (!surveyFilters.boothNumber ||
+                      response.boothNumber === surveyFilters.boothNumber) &&
+                    (!surveyFilters.constitution ||
+                      response.constitution === surveyFilters.constitution) &&
+                    (!surveyFilters.userName ||
+                      response.userName === surveyFilters.userName)
                   );
                 });
-                
+
                 // Apply sorting
                 const sortedResponses = [...filteredResponses].sort((a, b) => {
                   const config = sortConfig[survey.id];
                   if (!config) return 0;
-                  
+
                   let aValue = a[config.key];
                   let bValue = b[config.key];
-                  
+
                   // Handle question answers
-                  if (config.key.startsWith('question_')) {
-                    const questionId = config.key.replace('question_', '');
-                    aValue = a.answers?.[questionId] || '';
-                    bValue = b.answers?.[questionId] || '';
+                  if (config.key.startsWith("question_")) {
+                    const questionId = config.key.replace("question_", "");
+                    aValue = a.answers?.[questionId] || "";
+                    bValue = b.answers?.[questionId] || "";
                   }
-                  
+
                   // Handle different data types
-                  if (typeof aValue === 'string' && typeof bValue === 'string') {
+                  if (
+                    typeof aValue === "string" &&
+                    typeof bValue === "string"
+                  ) {
                     aValue = aValue.toLowerCase();
                     bValue = bValue.toLowerCase();
                   }
-                  
-                  if (aValue < bValue) return config.direction === 'asc' ? -1 : 1;
-                  if (aValue > bValue) return config.direction === 'asc' ? 1 : -1;
+
+                  if (aValue < bValue)
+                    return config.direction === "asc" ? -1 : 1;
+                  if (aValue > bValue)
+                    return config.direction === "asc" ? 1 : -1;
                   return 0;
                 });
-                
+
                 const responses = sortedResponses;
-                
+
                 // Get unique values for filters
                 const getUniqueValues = (key) => {
-                  const values = allResponses.map(r => r[key]).filter(v => v && v !== 'N/A');
+                  const values = allResponses
+                    .map((r) => r[key])
+                    .filter((v) => v && v !== "N/A");
                   return [...new Set(values)].sort();
                 };
-                
+
                 const handleSort = (key) => {
-                  setSortConfig(prev => {
+                  setSortConfig((prev) => {
                     const currentConfig = prev[survey.id];
-                    const newDirection = currentConfig?.key === key && currentConfig?.direction === 'asc' ? 'desc' : 'asc';
+                    const newDirection =
+                      currentConfig?.key === key &&
+                      currentConfig?.direction === "asc"
+                        ? "desc"
+                        : "asc";
                     return {
                       ...prev,
-                      [survey.id]: { key, direction: newDirection }
+                      [survey.id]: { key, direction: newDirection },
                     };
                   });
                 };
-                
+
                 const handleFilter = (filterKey, value) => {
-                  setFilters(prev => ({
+                  setFilters((prev) => ({
                     ...prev,
                     [survey.id]: {
                       ...prev[survey.id],
-                      [filterKey]: value === 'all' ? null : value
-                    }
+                      [filterKey]: value === "all" ? null : value,
+                    },
                   }));
                 };
-                
+
                 const getSortIcon = (key) => {
                   const config = sortConfig[survey.id];
-                  if (config?.key !== key) return <ArrowUpDown className="w-4 h-4" />;
-                  return config.direction === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
+                  if (config?.key !== key)
+                    return <ArrowUpDown className="w-4 h-4" />;
+                  return config.direction === "asc" ? (
+                    <ArrowUp className="w-4 h-4" />
+                  ) : (
+                    <ArrowDown className="w-4 h-4" />
+                  );
                 };
 
                 return (
@@ -386,35 +509,71 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
                     <CardContent className="p-6">
                       <div className="flex justify-between items-center">
                         <div className="flex-1">
-                          <h3 className="text-xl font-semibold text-gray-900">{survey.name}</h3>
+                          <h3 className="text-xl font-semibold text-gray-900">
+                            {survey.name}
+                          </h3>
                           <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
                             <span>Responses: {responses.length}</span>
                             <span>•</span>
                             <div className="flex items-center gap-1">
                               <Calendar className="w-4 h-4" />
-                              {survey.createdAt ? new Date(survey.createdAt).toLocaleDateString() : 'N/A'}
+                              {survey.createdAt
+                                ? new Date(
+                                    survey.createdAt
+                                  ).toLocaleDateString()
+                                : "N/A"}
                             </div>
                           </div>
-                          
+
                           {/* Filters */}
                           {isExpanded && allResponses.length > 0 && (
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                              {['area', 'boothNumber', 'constitution', 'userName'].map((filterKey) => {
-                                const labels = { area: 'Area', boothNumber: 'Booth Number', constitution: 'Constitution', userName: 'User Name' };
-                                const placeholders = { area: 'All Areas', boothNumber: 'All Booths', constitution: 'All Constitutions', userName: 'All Users' };
+                              {[
+                                "area",
+                                "boothNumber",
+                                "constitution",
+                                "userName",
+                              ].map((filterKey) => {
+                                const labels = {
+                                  area: "Area",
+                                  boothNumber: "Booth Number",
+                                  constitution: "Constitution",
+                                  userName: "User Name",
+                                };
+                                const placeholders = {
+                                  area: "All Areas",
+                                  boothNumber: "All Booths",
+                                  constitution: "All Constitutions",
+                                  userName: "All Users",
+                                };
                                 const dropdownKey = `${survey.id}_${filterKey}`;
                                 const isOpen = openDropdowns[dropdownKey];
-                                const currentFilter = filters[survey.id]?.[filterKey];
-                                
+                                const currentFilter =
+                                  filters[survey.id]?.[filterKey];
+
                                 return (
                                   <div key={filterKey} className="relative">
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">{labels[filterKey]}</label>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                      {labels[filterKey]}
+                                    </label>
                                     <button
-                                      onClick={() => setOpenDropdowns(prev => ({ ...prev, [dropdownKey]: !prev[dropdownKey] }))}
+                                      onClick={() =>
+                                        setOpenDropdowns((prev) => ({
+                                          ...prev,
+                                          [dropdownKey]: !prev[dropdownKey],
+                                        }))
+                                      }
                                       className="w-full h-8 px-3 text-xs border border-gray-300 rounded-md bg-white text-left flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
-                                      <span className={currentFilter ? 'text-gray-900' : 'text-gray-500'}>
-                                        {currentFilter || placeholders[filterKey]}
+                                      <span
+                                        className={
+                                          currentFilter
+                                            ? "text-gray-900"
+                                            : "text-gray-500"
+                                        }
+                                      >
+                                        {currentFilter ||
+                                          placeholders[filterKey]}
                                       </span>
                                       <ChevronDown className="w-4 h-4 text-gray-400" />
                                     </button>
@@ -422,25 +581,33 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
                                       <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
                                         <div
                                           onClick={() => {
-                                            handleFilter(filterKey, 'all');
-                                            setOpenDropdowns(prev => ({ ...prev, [dropdownKey]: false }));
+                                            handleFilter(filterKey, "all");
+                                            setOpenDropdowns((prev) => ({
+                                              ...prev,
+                                              [dropdownKey]: false,
+                                            }));
                                           }}
                                           className="px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
                                         >
                                           {placeholders[filterKey]}
                                         </div>
-                                        {getUniqueValues(filterKey).map(value => (
-                                          <div
-                                            key={value}
-                                            onClick={() => {
-                                              handleFilter(filterKey, value);
-                                              setOpenDropdowns(prev => ({ ...prev, [dropdownKey]: false }));
-                                            }}
-                                            className="px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
-                                          >
-                                            {value}
-                                          </div>
-                                        ))}
+                                        {getUniqueValues(filterKey).map(
+                                          (value) => (
+                                            <div
+                                              key={value}
+                                              onClick={() => {
+                                                handleFilter(filterKey, value);
+                                                setOpenDropdowns((prev) => ({
+                                                  ...prev,
+                                                  [dropdownKey]: false,
+                                                }));
+                                              }}
+                                              className="px-3 py-2 text-xs hover:bg-gray-100 cursor-pointer"
+                                            >
+                                              {value}
+                                            </div>
+                                          )
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -472,68 +639,130 @@ const SurveyResults = ({ profile, onProfileEdit, onLogout }) => {
                                 <thead className="bg-gray-50">
                                   <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                                      <button onClick={() => handleSort('index')} className="flex items-center gap-1 hover:text-gray-700">
-                                        S.No {getSortIcon('index')}
+                                      <button
+                                        onClick={() => handleSort("index")}
+                                        className="flex items-center gap-1 hover:text-gray-700"
+                                      >
+                                        S.No {getSortIcon("index")}
                                       </button>
                                     </th>
                                     {questionIds.map((questionId) => (
-                                      <th key={questionId} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        <button onClick={() => handleSort(`question_${questionId}`)} className="flex items-center gap-1 hover:text-gray-700">
-                                          {questions[questionId]} {getSortIcon(`question_${questionId}`)}
+                                      <th
+                                        key={questionId}
+                                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                      >
+                                        <button
+                                          onClick={() =>
+                                            handleSort(`question_${questionId}`)
+                                          }
+                                          className="flex items-center gap-1 hover:text-gray-700"
+                                        >
+                                          {questions[questionId]}{" "}
+                                          {getSortIcon(
+                                            `question_${questionId}`
+                                          )}
                                         </button>
                                       </th>
                                     ))}
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <button onClick={() => handleSort('area')} className="flex items-center gap-1 hover:text-gray-700">
-                                        Area {getSortIcon('area')}
+                                      <button
+                                        onClick={() => handleSort("area")}
+                                        className="flex items-center gap-1 hover:text-gray-700"
+                                      >
+                                        Area {getSortIcon("area")}
                                       </button>
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <button onClick={() => handleSort('boothNumber')} className="flex items-center gap-1 hover:text-gray-700">
-                                        Booth Number {getSortIcon('boothNumber')}
+                                      <button
+                                        onClick={() =>
+                                          handleSort("boothNumber")
+                                        }
+                                        className="flex items-center gap-1 hover:text-gray-700"
+                                      >
+                                        Booth Number{" "}
+                                        {getSortIcon("boothNumber")}
                                       </button>
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <button onClick={() => handleSort('constitution')} className="flex items-center gap-1 hover:text-gray-700">
-                                        Constitution {getSortIcon('constitution')}
+                                      <button
+                                        onClick={() =>
+                                          handleSort("constitution")
+                                        }
+                                        className="flex items-center gap-1 hover:text-gray-700"
+                                      >
+                                        Constitution{" "}
+                                        {getSortIcon("constitution")}
                                       </button>
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <button onClick={() => handleSort('locationName')} className="flex items-center gap-1 hover:text-gray-700">
-                                        Location {getSortIcon('locationName')}
+                                      <button
+                                        onClick={() =>
+                                          handleSort("locationName")
+                                        }
+                                        className="flex items-center gap-1 hover:text-gray-700"
+                                      >
+                                        Location {getSortIcon("locationName")}
                                       </button>
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <button onClick={() => handleSort('formattedSubmittedAt')} className="flex items-center gap-1 hover:text-gray-700">
-                                        Submitted At {getSortIcon('formattedSubmittedAt')}
+                                      <button
+                                        onClick={() =>
+                                          handleSort("formattedSubmittedAt")
+                                        }
+                                        className="flex items-center gap-1 hover:text-gray-700"
+                                      >
+                                        Submitted At{" "}
+                                        {getSortIcon("formattedSubmittedAt")}
                                       </button>
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                      <button onClick={() => handleSort('userName')} className="flex items-center gap-1 hover:text-gray-700">
-                                        User Name {getSortIcon('userName')}
+                                      <button
+                                        onClick={() => handleSort("userName")}
+                                        className="flex items-center gap-1 hover:text-gray-700"
+                                      >
+                                        User Name {getSortIcon("userName")}
                                       </button>
                                     </th>
                                   </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                   {responses.map((response, index) => (
-                                    <tr key={response.id} className="hover:bg-gray-50">
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{index + 1}</td>
+                                    <tr
+                                      key={response.id}
+                                      className="hover:bg-gray-50"
+                                    >
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {index + 1}
+                                      </td>
                                       {questionIds.map((questionId) => (
-                                        <td key={questionId} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 max-w-xs truncate">
-                                          {response.answers && response.answers[questionId] ? response.answers[questionId] : 'N/A'}
+                                        <td
+                                          key={questionId}
+                                          className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 max-w-xs truncate"
+                                        >
+                                          {response.answers &&
+                                          response.answers[questionId]
+                                            ? response.answers[questionId]
+                                            : "N/A"}
                                         </td>
                                       ))}
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{response.area || 'N/A'}</td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{response.boothNumber || 'N/A'}</td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{response.constitution || 'N/A'}</td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 max-w-xs truncate">
-                                        {response.locationName || 'N/A'}
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {response.area || "N/A"}
                                       </td>
                                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {response.formattedSubmittedAt || 'N/A'}
+                                        {response.boothNumber || "N/A"}
                                       </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{response.userName || 'N/A'}</td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {response.constitution || "N/A"}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 max-w-xs truncate">
+                                        {response.locationName || "N/A"}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {response.formattedSubmittedAt || "N/A"}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {response.userName || "N/A"}
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>

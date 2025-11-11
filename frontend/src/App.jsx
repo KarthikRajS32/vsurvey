@@ -14,7 +14,13 @@ import ClientAdminHeader from "./components/Pages/Client/ClientAdminHeader";
 import SetPassword from "./components/Pages/EmailPasswordSet/SetPassword";
 import SurveyResults from "./components/Pages/Client/clientSurveyResult";
 import { auth, db } from "./firebase";
-import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  getDocs,
+} from "firebase/firestore";
 
 // Client status monitoring functions
 let statusListener = null;
@@ -23,32 +29,36 @@ const startClientStatusMonitoring = (email, onLogout) => {
   if (statusListener) {
     statusListener();
   }
-  const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+  const superadminId = "u1JiUOCTXxaOkoK83AFH";
   const clientsRef = collection(db, "superadmin", superadminId, "clients");
   const q = query(clientsRef, where("email", "==", email));
-  
-  statusListener = onSnapshot(q, (snapshot) => {
-    console.log('Client status check for:', email);
-    if (snapshot.empty) {
-      // Client document no longer exists - client was deleted
-      console.log('Client deleted, logging out:', email);
-      auth.signOut();
-      onLogout();
-    } else {
-      const clientData = snapshot.docs[0].data();
-      console.log('Client data:', clientData);
-      
-      // Check if client is deactivated (isActive: false)
-      // Don't auto-logout pending clients (new clients setting up profile)
-      if (clientData.isActive === false && clientData.status !== "pending") {
-        console.log('Client deactivated, logging out:', email);
+
+  statusListener = onSnapshot(
+    q,
+    (snapshot) => {
+      console.log("Client status check for:", email);
+      if (snapshot.empty) {
+        // Client document no longer exists - client was deleted
+        console.log("Client deleted, logging out:", email);
         auth.signOut();
         onLogout();
+      } else {
+        const clientData = snapshot.docs[0].data();
+        console.log("Client data:", clientData);
+
+        // Check if client is deactivated (isActive: false)
+        // Don't auto-logout pending clients (new clients setting up profile)
+        if (clientData.isActive === false && clientData.status !== "pending") {
+          console.log("Client deactivated, logging out:", email);
+          auth.signOut();
+          onLogout();
+        }
       }
+    },
+    (error) => {
+      console.error("Error monitoring client status:", error);
     }
-  }, (error) => {
-    console.error('Error monitoring client status:', error);
-  });
+  );
 };
 
 const stopClientStatusMonitoring = () => {
@@ -62,7 +72,11 @@ function App() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState("personnel");
   const [session, setSession] = useState(() => {
-    return localStorage.getItem("currentSuperAdmin") || localStorage.getItem("currentClientAdmin") || localStorage.getItem("currentUser") ? true : false;
+    return localStorage.getItem("currentSuperAdmin") ||
+      localStorage.getItem("currentClientAdmin") ||
+      localStorage.getItem("currentUser")
+      ? true
+      : false;
   });
   const [userType, setUserType] = useState(() => {
     if (localStorage.getItem("currentSuperAdmin")) return "superadmin";
@@ -94,7 +108,7 @@ function App() {
       stopClientStatusMonitoring();
       await auth.signOut();
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Error signing out:", error);
     }
     setSession(false);
     setUserType(null);
@@ -107,7 +121,7 @@ function App() {
   };
 
   const handleProfileComplete = (profileData) => {
-    setClientAdminData(prev => ({
+    setClientAdminData((prev) => ({
       ...prev,
       profile: profileData,
       isFirstTime: false,
@@ -159,7 +173,10 @@ function App() {
         // Check if it's superadmin by email
         if (user.email === "superadmin@vsurvey.com") {
           console.log("SuperAdmin detected, staying on SuperAdmin dashboard");
-          localStorage.setItem("currentSuperAdmin", JSON.stringify({ email: user.email }));
+          localStorage.setItem(
+            "currentSuperAdmin",
+            JSON.stringify({ email: user.email })
+          );
           setUserType("superadmin");
           setSession(true);
           return;
@@ -167,13 +184,18 @@ function App() {
 
         // Skip navigation if we're in the middle of creating a user
         if (window.isCreatingUser) {
-          console.log("User creation in progress, skipping navigation and activation");
+          console.log(
+            "User creation in progress, skipping navigation and activation"
+          );
           return;
         }
-        
+
         // Skip activation for newly created users - they should remain pending
         if (window.justCreatedUser === user.email) {
-          console.log("Newly created user detected, skipping auto-activation:", user.email);
+          console.log(
+            "Newly created user detected, skipping auto-activation:",
+            user.email
+          );
           return;
         }
 
@@ -183,26 +205,34 @@ function App() {
           setShowDeactivationMessage(true);
           handleLogout();
         });
-        
+
         // Check Firebase for profile setup status
         const checkProfileSetup = async () => {
           setIsCheckingProfile(true);
           try {
-            const superadminId = "U0UjGVvDJoDbLtWAhyjp";
-            const clientsRef = collection(db, "superadmin", superadminId, "clients");
+            const superadminId = "u1JiUOCTXxaOkoK83AFH";
+            const clientsRef = collection(
+              db,
+              "superadmin",
+              superadminId,
+              "clients"
+            );
             const q = query(clientsRef, where("email", "==", user.email));
             const snapshot = await getDocs(q);
-            
+
             if (!snapshot.empty) {
               const clientData = snapshot.docs[0].data();
               // is_first_time: false = needs setup, true = setup complete, undefined = needs setup
               const needsSetup = clientData.is_first_time !== true;
-              
-              console.log('Profile setup check:', { is_first_time: clientData.is_first_time, needsSetup });
-              console.log('Client data from Firebase:', clientData);
+
+              console.log("Profile setup check:", {
+                is_first_time: clientData.is_first_time,
+                needsSetup,
+              });
+              console.log("Client data from Firebase:", clientData);
               // Cache the profile data
               setProfileCache(clientData);
-              setClientAdminData(prev => {
+              setClientAdminData((prev) => {
                 // Preserve existing profile if it exists and clientData is complete
                 const profileToUse = clientData;
                 return {
@@ -219,7 +249,7 @@ function App() {
               });
             }
           } catch (error) {
-            console.error('Error checking profile setup:', error);
+            console.error("Error checking profile setup:", error);
             setClientAdminData({
               email: user.email,
               isFirstTime: true,
@@ -229,7 +259,7 @@ function App() {
             setIsCheckingProfile(false);
           }
         };
-        
+
         checkProfileSetup();
         setUserType("client");
         setSession(true);
@@ -240,8 +270,6 @@ function App() {
         setClientAdminData(null);
       }
     });
-
-
 
     return () => {
       unsubscribe();
@@ -310,20 +338,28 @@ function App() {
   if (isPasswordSetupPage) {
     return (
       <Routes>
-        <Route path="/set-password" element={
-          <SetPassword onPasswordSet={(type) => {
-            if (type === 'superadmin') {
-              localStorage.setItem("currentSuperAdmin", JSON.stringify({ email: 'superadmin@vsurvey.com' }));
-              setUserType('superadmin');
-            } else if (type === 'client') {
-              setUserType('client');
-            } else if (type === 'user') {
-              setUserType('user');
-            }
-            setSession(true);
-            window.location.href = '/';
-          }} />
-        } />
+        <Route
+          path="/set-password"
+          element={
+            <SetPassword
+              onPasswordSet={(type) => {
+                if (type === "superadmin") {
+                  localStorage.setItem(
+                    "currentSuperAdmin",
+                    JSON.stringify({ email: "superadmin@vsurvey.com" })
+                  );
+                  setUserType("superadmin");
+                } else if (type === "client") {
+                  setUserType("client");
+                } else if (type === "user") {
+                  setUserType("user");
+                }
+                setSession(true);
+                window.location.href = "/";
+              }}
+            />
+          }
+        />
       </Routes>
     );
   }
@@ -334,18 +370,23 @@ function App() {
         <Route
           path="/set-password-admin"
           element={
-            <SetPassword onPasswordSet={(type) => {
-              if (type === 'superadmin') {
-                localStorage.setItem("currentSuperAdmin", JSON.stringify({ email: 'superadmin@vsurvey.com' }));
-                setUserType('superadmin');
-              } else if (type === 'client') {
-                setUserType('client');
-              } else if (type === 'user') {
-                setUserType('user');
-              }
-              setSession(true);
-              window.location.href = '/';
-            }} />
+            <SetPassword
+              onPasswordSet={(type) => {
+                if (type === "superadmin") {
+                  localStorage.setItem(
+                    "currentSuperAdmin",
+                    JSON.stringify({ email: "superadmin@vsurvey.com" })
+                  );
+                  setUserType("superadmin");
+                } else if (type === "client") {
+                  setUserType("client");
+                } else if (type === "user") {
+                  setUserType("user");
+                }
+                setSession(true);
+                window.location.href = "/";
+              }}
+            />
           }
         />
         <Route
@@ -356,8 +397,13 @@ function App() {
                 {showDeactivationMessage && (
                   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg p-6 max-w-md mx-4">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Account Deactivated</h3>
-                      <p className="text-gray-600 mb-6">Your account has been deactivated. Please contact the administrator.</p>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                        Account Deactivated
+                      </h3>
+                      <p className="text-gray-600 mb-6">
+                        Your account has been deactivated. Please contact the
+                        administrator.
+                      </p>
                       <button
                         onClick={() => setShowDeactivationMessage(false)}
                         className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
@@ -369,21 +415,21 @@ function App() {
                 )}
                 <Login
                   onLogin={(type, data) => {
-                  setUserType(type);
-                  if (type === "client") {
-                    setClientAdminData(data);
-                    localStorage.setItem(
-                      "currentClientAdmin",
-                      JSON.stringify({ email: data.email })
-                    );
-                  } else if (type === "user") {
-                    setUserData(data);
-                    localStorage.setItem(
-                      "currentUser",
-                      JSON.stringify({ email: data.email })
-                    );
-                  }
-                  setSession(true);
+                    setUserType(type);
+                    if (type === "client") {
+                      setClientAdminData(data);
+                      localStorage.setItem(
+                        "currentClientAdmin",
+                        JSON.stringify({ email: data.email })
+                      );
+                    } else if (type === "user") {
+                      setUserData(data);
+                      localStorage.setItem(
+                        "currentUser",
+                        JSON.stringify({ email: data.email })
+                      );
+                    }
+                    setSession(true);
                   }}
                 />
               </>
@@ -392,10 +438,16 @@ function App() {
             ) : userType === "user" ? (
               <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="text-center">
-                  <h1 className="text-3xl font-bold text-gray-900 mb-4">Welcome, {userData?.email}!</h1>
-                  <p className="text-gray-600 mb-8">Your account has been activated successfully.</p>
-                  <p className="text-sm text-gray-500">Survey interface coming soon...</p>
-                  <button 
+                  <h1 className="text-3xl font-bold text-gray-900 mb-4">
+                    Welcome, {userData?.email}!
+                  </h1>
+                  <p className="text-gray-600 mb-8">
+                    Your account has been activated successfully.
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Survey interface coming soon...
+                  </p>
+                  <button
                     onClick={handleLogout}
                     className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
@@ -410,7 +462,8 @@ function App() {
                   <p className="text-gray-600">Loading...</p>
                 </div>
               </div>
-            ) : clientAdminData && (clientAdminData.isFirstTime === true || showProfileEdit) ? (
+            ) : clientAdminData &&
+              (clientAdminData.isFirstTime === true || showProfileEdit) ? (
               <ProfileSetup
                 email={clientAdminData.email}
                 onComplete={handleProfileComplete}

@@ -68,7 +68,7 @@ const SuperAdminDashboardAPI = () => {
   const [clientDetails, setClientDetails] = useState({
     users: [],
     surveys: [],
-    questions: []
+    questions: [],
   });
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -79,9 +79,9 @@ const SuperAdminDashboardAPI = () => {
 
   // Load clients from Firebase with real-time listener for status changes only
   useEffect(() => {
-    const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+    const superadminId = "u1JiUOCTXxaOkoK83AFH";
     const clientsRef = collection(db, "superadmin", superadminId, "clients");
-    
+
     // Set up real-time listener only for status field changes
     const unsubscribe = onSnapshot(clientsRef, (snapshot) => {
       const clients = [];
@@ -98,26 +98,30 @@ const SuperAdminDashboardAPI = () => {
           ...data,
         });
       });
-      
+
       // Only update if there are actual changes
-      setClientAdmins(prevClients => {
-        const hasChanges = JSON.stringify(prevClients) !== JSON.stringify(clients);
+      setClientAdmins((prevClients) => {
+        const hasChanges =
+          JSON.stringify(prevClients) !== JSON.stringify(clients);
         if (hasChanges) {
-          console.log("Client status updated:", clients.filter(c => c.status === "active").map(c => c.email));
+          console.log(
+            "Client status updated:",
+            clients.filter((c) => c.status === "active").map((c) => c.email)
+          );
           return clients;
         }
         return prevClients;
       });
     });
-    
+
     return () => unsubscribe();
   }, []);
 
   const loadClients = async () => {
     try {
       setLoading(true);
-      // Get clients from Firebase structure: superadmin/U0UjGVvDJoDbLtWAhyjp/clients
-      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      // Get clients from Firebase structure: superadmin/u1JiUOCTXxaOkoK83AFH/clients
+      const superadminId = "u1JiUOCTXxaOkoK83AFH";
       const clientsRef = collection(db, "superadmin", superadminId, "clients");
       const snapshot = await getDocs(clientsRef);
 
@@ -138,11 +142,14 @@ const SuperAdminDashboardAPI = () => {
 
       console.log("Loaded clients:", clients); // Debug log
       setClientAdmins(clients);
-      
+
       // Check if any client status changed from pending to active
-      const activeClients = clients.filter(c => c.status === "active");
+      const activeClients = clients.filter((c) => c.status === "active");
       if (activeClients.length > 0) {
-        console.log("Active clients detected:", activeClients.map(c => c.email));
+        console.log(
+          "Active clients detected:",
+          activeClients.map((c) => c.email)
+        );
       }
     } catch (error) {
       console.error("Error loading clients:", error);
@@ -185,8 +192,14 @@ const SuperAdminDashboardAPI = () => {
       console.log("Password reset email sent successfully");
 
       // Create client document using Firebase UID as document ID
-      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
-      const clientDocRef = doc(db, "superadmin", superadminId, "clients", userCredential.user.uid);
+      const superadminId = "u1JiUOCTXxaOkoK83AFH";
+      const clientDocRef = doc(
+        db,
+        "superadmin",
+        superadminId,
+        "clients",
+        userCredential.user.uid
+      );
 
       const newClient = {
         activatedAt: "",
@@ -257,7 +270,7 @@ const SuperAdminDashboardAPI = () => {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      const superadminId = "u1JiUOCTXxaOkoK83AFH";
       await updateDoc(
         doc(db, "superadmin", superadminId, "clients", editingClient.id),
         { company_name: editFormData.name.trim() }
@@ -288,28 +301,103 @@ const SuperAdminDashboardAPI = () => {
       console.log("=== STARTING CLIENT DELETION ===");
       console.log("Client ID:", clientToDelete.id);
       console.log("Firebase UID:", clientToDelete.firebaseUid);
+
+
+
+      // Ensure SuperAdmin is authenticated with Firebase Auth
+      let user = auth.currentUser;
+      if (!user || user.email !== "superadmin@vsurvey.com") {
+        console.log("SuperAdmin not authenticated, signing in...");
+        try {
+          const userCredential = await signInWithEmailAndPassword(
+            auth, 
+            "superadmin@vsurvey.com", 
+            "superadmin123"
+          );
+          user = userCredential.user;
+          console.log("SuperAdmin authenticated successfully");
+        } catch (authError) {
+          console.error("Failed to authenticate SuperAdmin:", authError);
+          throw new Error("Authentication failed - please check SuperAdmin credentials");
+        }
+      }
       
-      // Import Firebase Functions
-      const { getFunctions, httpsCallable } = await import('firebase/functions');
-      const functions = getFunctions();
-      const deleteUserFunction = httpsCallable(functions, 'deleteUser');
-      
-      // Call Cloud Function to delete user
-      const result = await deleteUserFunction({
-        uid: clientToDelete.firebaseUid || clientToDelete.id,
-        clientId: true
+      const token = await user.getIdToken();
+
+      // Use existing legacy delete endpoint
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/delete-user/${clientToDelete.firebaseUid || clientToDelete.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
+
+      const result = await response.json();
       
-      console.log("Cloud Function Result:", result.data);
-      
-      if (result.data.success) {
-        setMessage("✅ Client deleted successfully from both Authentication and Database!");
-      } else if (result.data.firestoreDeleted) {
-        setMessage("⚠️ Client deleted from Database but Authentication deletion failed.");
-      } else if (result.data.authDeleted) {
-        setMessage("⚠️ Client deleted from Authentication but Database deletion failed.");
+      if (response.ok && result.success) {
+        // Now delete from Firestore (since legacy endpoint only deletes from Auth)
+        const superadminId = "u1JiUOCTXxaOkoK83AFH";
+        
+        // Delete all users created by this client
+        const globalUsersRef = collection(db, "users");
+        const globalUsersSnapshot = await getDocs(globalUsersRef);
+        const userDeletePromises = [];
+        
+        globalUsersSnapshot.forEach((userDoc) => {
+          const userData = userDoc.data();
+          if (userData.created_by === clientToDelete.email) {
+            userDeletePromises.push(deleteDoc(doc(db, "users", userDoc.id)));
+          }
+        });
+        
+        await Promise.all(userDeletePromises);
+        console.log(`✅ Deleted ${userDeletePromises.length} users`);
+
+        // Delete all surveys for this client
+        const surveysRef = collection(db, "superadmin", superadminId, "clients", clientToDelete.id, "surveys");
+        const surveysSnapshot = await getDocs(surveysRef);
+        const surveyDeletePromises = [];
+        
+        surveysSnapshot.forEach((surveyDoc) => {
+          surveyDeletePromises.push(deleteDoc(surveyDoc.ref));
+        });
+        
+        await Promise.all(surveyDeletePromises);
+        console.log(`✅ Deleted ${surveyDeletePromises.length} surveys`);
+
+        // Delete all questions for this client
+        const questionsRef = collection(db, "superadmin", superadminId, "clients", clientToDelete.id, "questions");
+        const questionsSnapshot = await getDocs(questionsRef);
+        const questionDeletePromises = [];
+        
+        questionsSnapshot.forEach((questionDoc) => {
+          questionDeletePromises.push(deleteDoc(questionDoc.ref));
+        });
+        
+        await Promise.all(questionDeletePromises);
+        console.log(`✅ Deleted ${questionDeletePromises.length} questions`);
+
+        // Delete all survey assignments for this client
+        const assignmentsRef = collection(db, "superadmin", superadminId, "clients", clientToDelete.id, "survey_assignments");
+        const assignmentsSnapshot = await getDocs(assignmentsRef);
+        const assignmentDeletePromises = [];
+        
+        assignmentsSnapshot.forEach((assignmentDoc) => {
+          assignmentDeletePromises.push(deleteDoc(assignmentDoc.ref));
+        });
+        
+        await Promise.all(assignmentDeletePromises);
+        console.log(`✅ Deleted ${assignmentDeletePromises.length} survey assignments`);
+
+        // Delete client document
+        const clientDocRef = doc(db, "superadmin", superadminId, "clients", clientToDelete.id);
+        await deleteDoc(clientDocRef);
+        console.log("✅ Client document deleted from Firestore");
+        
+        setMessage("✅ Client and all associated data deleted successfully from both Auth and Database!");
       } else {
-        setMessage("❌ Failed to delete client from both Authentication and Database.");
+        setMessage(`❌ ${result.message || 'Failed to delete client from Firebase Auth'}`);
+        console.error("Auth deletion failed:", result);
       }
       
       setTimeout(() => setMessage(""), 5000);
@@ -389,26 +477,26 @@ const SuperAdminDashboardAPI = () => {
 
   const toggleClientStatus = async (clientId, currentIsActive) => {
     try {
-      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
+      const superadminId = "u1JiUOCTXxaOkoK83AFH";
       const newIsActive = !currentIsActive;
       const newStatus = newIsActive ? "active" : "inactive";
-      
+
       // Update client status
       await updateDoc(
         doc(db, "superadmin", superadminId, "clients", clientId),
         {
           isActive: newIsActive,
-          status: newStatus
+          status: newStatus,
         }
       );
-      
+
       // If deactivating client, also deactivate all users under this client
       if (!newIsActive) {
-        const client = clientAdmins.find(c => c.id === clientId);
+        const client = clientAdmins.find((c) => c.id === clientId);
         if (client) {
           const globalUsersRef = collection(db, "users");
           const globalUsersSnapshot = await getDocs(globalUsersRef);
-          
+
           const updatePromises = [];
           globalUsersSnapshot.forEach((userDoc) => {
             const userData = userDoc.data();
@@ -416,18 +504,22 @@ const SuperAdminDashboardAPI = () => {
               updatePromises.push(
                 updateDoc(doc(db, "users", userDoc.id), {
                   status: "inactive",
-                  is_active: false
+                  is_active: false,
                 })
               );
             }
           });
-          
+
           await Promise.all(updatePromises);
-          console.log(`Deactivated ${updatePromises.length} users under client ${client.email}`);
+          console.log(
+            `Deactivated ${updatePromises.length} users under client ${client.email}`
+          );
         }
       }
-      
-      setMessage(`Client ${newIsActive ? 'activated' : 'deactivated'} successfully!`);
+
+      setMessage(
+        `Client ${newIsActive ? "activated" : "deactivated"} successfully!`
+      );
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {
       console.error("Error updating client status:", error);
@@ -439,25 +531,25 @@ const SuperAdminDashboardAPI = () => {
     try {
       await signOut(auth);
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Error signing out:", error);
     }
     localStorage.removeItem("currentSuperAdmin");
     localStorage.removeItem("currentClientAdmin");
     localStorage.removeItem("currentUser");
-    window.location.replace('/');
+    window.location.replace("/");
   };
 
   const fetchClientDetails = async (clientId, client = selectedClient) => {
     try {
       setLoadingDetails(true);
-      const superadminId = "U0UjGVvDJoDbLtWAhyjp";
-      
+      const superadminId = "u1JiUOCTXxaOkoK83AFH";
+
       // Fetch users from global users collection filtered by created_by
       let users = [];
       try {
         const globalUsersRef = collection(db, "users");
         const globalUsersSnapshot = await getDocs(globalUsersRef);
-        
+
         globalUsersSnapshot.forEach((doc) => {
           const userData = doc.data();
           if (userData.created_by === client?.email) {
@@ -467,24 +559,42 @@ const SuperAdminDashboardAPI = () => {
       } catch (error) {
         console.error("Error fetching from global users collection:", error);
       }
-      
+
       // Fetch surveys
-      const surveysRef = collection(db, "superadmin", superadminId, "clients", clientId, "surveys");
+      const surveysRef = collection(
+        db,
+        "superadmin",
+        superadminId,
+        "clients",
+        clientId,
+        "surveys"
+      );
       const surveysSnapshot = await getDocs(surveysRef);
       const surveys = [];
       surveysSnapshot.forEach((doc) => {
         surveys.push({ id: doc.id, ...doc.data() });
       });
-      
+
       // Fetch questions
-      const questionsRef = collection(db, "superadmin", superadminId, "clients", clientId, "questions");
+      const questionsRef = collection(
+        db,
+        "superadmin",
+        superadminId,
+        "clients",
+        clientId,
+        "questions"
+      );
       const questionsSnapshot = await getDocs(questionsRef);
       const questions = [];
       questionsSnapshot.forEach((doc) => {
         questions.push({ id: doc.id, ...doc.data() });
       });
-      
-      console.log('Final client details:', { users: users.length, surveys: surveys.length, questions: questions.length });
+
+      console.log("Final client details:", {
+        users: users.length,
+        surveys: surveys.length,
+        questions: questions.length,
+      });
       setClientDetails({ users, surveys, questions });
     } catch (error) {
       console.error("Error fetching client details:", error);
@@ -586,7 +696,11 @@ const SuperAdminDashboardAPI = () => {
                       />
                     </div>
 
-                    <Button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700">
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-700"
+                    >
                       {loading ? "Creating..." : "Create Client Admin"}
                     </Button>
                   </form>
@@ -615,17 +729,23 @@ const SuperAdminDashboardAPI = () => {
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <Building className="w-4 h-4 text-gray-500" />
-                              <h3 className="font-semibold">{admin.company_name || admin.name}</h3>
+                              <h3 className="font-semibold">
+                                {admin.company_name || admin.name}
+                              </h3>
                               <span
                                 className={`px-2 py-1 text-xs rounded-full ${
                                   admin.status === "active"
                                     ? "bg-green-100 text-green-800"
                                     : admin.status === "pending"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : "bg-red-100 text-red-800"
+                                      ? "bg-yellow-100 text-yellow-800"
+                                      : "bg-red-100 text-red-800"
                                 }`}
                               >
-                                {admin.status === "active" ? "Active" : admin.status === "pending" ? "Pending" : "Inactive"}
+                                {admin.status === "active"
+                                  ? "Active"
+                                  : admin.status === "pending"
+                                    ? "Pending"
+                                    : "Inactive"}
                               </span>
                             </div>
                             <p className="text-sm text-gray-600 mb-1">
@@ -644,7 +764,10 @@ const SuperAdminDashboardAPI = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={(e) => resendPasswordEmail(admin.email) && e.stopPropagation()}
+                              onClick={(e) =>
+                                resendPasswordEmail(admin.email) &&
+                                e.stopPropagation()
+                              }
                               title="Resend password setup email"
                             >
                               <Mail className="w-4 h-4" />
@@ -732,7 +855,10 @@ const SuperAdminDashboardAPI = () => {
                         Active Clients
                       </p>
                       <p className="text-2xl font-bold">
-                        {clientAdmins.filter((c) => c.status === "active").length}
+                        {
+                          clientAdmins.filter((c) => c.status === "active")
+                            .length
+                        }
                       </p>
                     </div>
                     <UserCheck className="w-8 h-8 text-green-500" />
@@ -748,7 +874,10 @@ const SuperAdminDashboardAPI = () => {
                         Pending Clients
                       </p>
                       <p className="text-2xl font-bold">
-                        {clientAdmins.filter((c) => c.status === "pending").length}
+                        {
+                          clientAdmins.filter((c) => c.status === "pending")
+                            .length
+                        }
                       </p>
                     </div>
                     <Mail className="w-8 h-8 text-yellow-500" />
@@ -764,7 +893,10 @@ const SuperAdminDashboardAPI = () => {
                         Inactive Clients
                       </p>
                       <p className="text-2xl font-bold">
-                        {clientAdmins.filter((c) => c.status === "inactive").length}
+                        {
+                          clientAdmins.filter((c) => c.status === "inactive")
+                            .length
+                        }
                       </p>
                     </div>
                     <UserX className="w-8 h-8 text-red-500" />
