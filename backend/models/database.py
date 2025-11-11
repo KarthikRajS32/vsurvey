@@ -1,7 +1,22 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
+import json
+import firebase_admin
+from firebase_admin import credentials
 from typing import Optional
+
+
+firebase_json = os.environ.get("FIREBASE_CREDENTIALS_JSON")
+
+if firebase_json:
+    cred_dict = json.loads(firebase_json)
+    cred = credentials.Certificate(cred_dict)
+else:
+    cred = credentials.Certificate("serviceAccountKey.json")  # fallback for local dev
+
+firebase_admin.initialize_app(cred)
+
 
 # Global Firestore client
 db: Optional[firestore.Client] = None
